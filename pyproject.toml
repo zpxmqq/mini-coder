@@ -1,0 +1,10 @@
+[project]
+name = "mini-code"
+version = "0.1.0"
+description = "这是一个关于agent的练手项目，我们的最终成品是一个类似Claude code的轻量版智能体，其中包含了skills，tool calling，prompt engineer，多agent协同等方面"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=2.41.0",
+    "python-dotenv>=1.2.2",
+]
