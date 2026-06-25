@@ -8,7 +8,6 @@ TOOL_FUNCTIONS = {
     "grep": grep,
     "bash": bash,
 }
-
 MAX_ITER = 5
 
 def run(messages: list[dict], tools: list[dict]| None = None) -> str:
