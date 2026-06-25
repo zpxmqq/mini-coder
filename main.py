@@ -1,6 +1,6 @@
 from provider import init_client
 from config import api_key, base_url
-from tool import read_file_tool
+from tool import read_file_tool, write_file_tool, edit_file_tool, grep_tool, bash_tool
 from agent import run
 
 def main() -> None:
@@ -15,7 +15,7 @@ def main() -> None:
         if user_input.lower() == "exit":
             break
         messages.append({"role": "user", "content": user_input})
-        answer = run(messages, tools=[read_file_tool])
+        answer = run(messages, tools=[read_file_tool, write_file_tool, edit_file_tool, grep_tool, bash_tool])
         print(answer)
         
 if __name__ == "__main__":

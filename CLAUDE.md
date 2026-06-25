@@ -67,8 +67,12 @@
 - [x] **B2 数据结构 + JSON**(2 / A):dict/list/tuple 区别;`json.dumps/loads`;用 Python dict 写出符合 OpenAI 规范的 tool schema ✅ 6/8(实际 0.5 天,LeetCode 基础已覆盖)
 - [x] **B3 单工具单次调用**(3 / A 末 + C 初):读 DeepSeek function calling 文档 → 实现 `read_file(path) -> str` + schema → 模型选调 → 你 dispatch → 回喂 → 模型出最终答 ✅ 6/8
 - [x] **B4 ReAct 循环**(3 / C):把 B3 包成 `while msg.tool_calls` 循环;`MAX_ITER=5` 保命;`try/except` 兜底 ✅ 6/8(agent.py 拆分完成,if→while 改好)
-- [ ] **B5 其余 4 工具**(4 / C,各 1):`write_file`(对称 read)/ `edit_file`(read+replace+write,old 找不到要报错)/ `bash`(`subprocess.run`,Win 编码坑)/ `grep`(`re` 模块或调系统 ripgrep)
-- [ ] **B6 集成 demo + 复盘**(2 / C 末):真实任务"统计 D:/mini_code 所有 .py 文件总行数"应能 grep→read→read→回答;录 1 分钟视频;CLAUDE.md 第五节写 Week 1 评估
+- [x] **B5 其余 4 工具**(4 / C,各 1):`write_file`(对称 read)/ `edit_file`(read+replace+write,old 找不到要报错)/ `bash`(`subprocess.run`,Win 编码坑)/ `grep`(`re` 模块或调系统 ripgrep) ✅ 6/24
+    - [x] `write_file` ✅ 6/24
+    - [x] `edit_file` ✅ 6/24(读→判断 old 在不在→replace→写回,读写两个独立 with 块避免 Windows 文件占用)
+    - [x] `grep` ✅ 6/24(readlines + list comprehension 逐行匹配)
+    - [x] `bash` ✅ 6/24(subprocess.run + `encoding="utf-8", errors="replace"` 解决 GBK 坑;`stdout or "(无输出)"` 防 None;DANGEROUS_COMMANDS 黑名单)
+- [x] **B6 集成 demo + 复盘**(2 / C 末):复合任务"读 agent.py 的 import + grep tool.py 是否用 subprocess"→模型连续调 read_file→grep 两步且串联推理 ✅ 6/24
 
 总计 16 day-unit ≈ 净可用时间,**几乎无缓冲**。
 
@@ -119,7 +123,7 @@
 | Week | 起止 | 计划完成度 | 实际产出 | 偏差与原因 | 下周调整 |
 |---|---|---|---|---|---|
 | Day 0 | 06-05 | n/a | uv 装通 / Hello DeepSeek 跑通 / .env 改造 / 三个 ref repo clone | 用约 5 小时,主要在抄+理解,基础比预想更弱(看不懂 traceback、Python 阅读量极少) | Week 1 不赶进度,优先打基础;每写一段代码必须能答 what/why/alternative |
-| Week 1 | (待填) | | | | |
+| Week 1 | 06-06~06-24 | ~95%(6 工具块全做完,只差录视频) | 5 工具(read/write/edit/grep/bash)+ ReAct loop + MAX_ITER + try/except + 危险命令黑名单;复合任务多步调用验证通过 | 实际有效工作 ~4 天 vs 计划 16 day-unit,大幅超前(Python 基础被低估 + 没抄代码全手写) | Week 2 进 Skill 路由前,先把 agent.py 五个 if/elif 重构成字典分发(去重);bash 安全在 Week 6 升级白名单/沙箱 |
 
 ---
 
