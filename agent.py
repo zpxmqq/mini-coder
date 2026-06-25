@@ -1,8 +1,15 @@
 from provider import chat_with_deepseek
 from tool import read_file, write_file, edit_file, grep, bash
 import json
+TOOL_FUNCTIONS = {
+    "read_file": read_file,
+    "write_file": write_file,
+    "edit_file": edit_file,
+    "grep": grep,
+    "bash": bash,
+}
 
-MAX_ITER = 15
+MAX_ITER = 5
 
 def run(messages: list[dict], tools: list[dict]| None = None) -> str:
     iteration = 0
@@ -17,49 +24,16 @@ def run(messages: list[dict], tools: list[dict]| None = None) -> str:
 
         for tc in msg.tool_calls:
             name = tc.function.name
-
-            if name == "read_file":
-                try:
-                    args = json.loads(tc.function.arguments)
-                    result = read_file(**args)
-                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
-                except Exception as e:
-                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": f"工具执行失败: {e}"})
-
-            elif name == "write_file":
-                try:
-                    args = json.loads(tc.function.arguments)
-                    result = write_file(**args)
-                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
-                except Exception as e:
-                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": f"工具执行失败: {e}"})
-
-            elif name == "edit_file":
-                try:
-                    args = json.loads(tc.function.arguments)
-                    result = edit_file(**args) 
-                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
-                except Exception as e:
-                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": f"工具执行失败: {e}"})
-            
-            elif name == "grep":
-                try:
-                    args = json.loads(tc.function.arguments)
-                    result = grep(**args)
-                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
-                except Exception as e:
-                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": f"工具执行失败: {e}"})
-            
-            elif name == "bash":
-                try:
-                    args = json.loads(tc.function.arguments)
-                    result = bash(**args)
-                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
-                except Exception as e:
-                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": f"工具执行失败: {e}"})
-
+            func = TOOL_FUNCTIONS.get(name)
+            if func is None:
+                messages.append({"role": "tool", "tool_call_id": tc.id, "content": f"未知工具:{name}"})
             else:
-                messages.append({"role": "tool", "tool_call_id": tc.id, "content": f"未知工具:{name}"})    
+                try:
+                    args = json.loads(tc.function.arguments)
+                    result = func(**args)
+                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+                except Exception as e:
+                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": f"工具执行失败: {e}"})
 
         resp = chat_with_deepseek(messages, tools=tools)
         msg = resp.choices[0].message
