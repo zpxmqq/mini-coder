@@ -204,3 +204,19 @@ def bash(command: str) -> str:
             return f"命令执行失败: {result.stderr}"
     except Exception as e:
         return f"无法执行命令: {e}"
+    
+ALL_TOOLS = [
+    read_file_tool, 
+    write_file_tool, 
+    edit_file_tool, 
+    grep_tool, 
+    bash_tool
+]
+
+TOOL_FUNCTIONS = {
+    "read_file": read_file,
+    "write_file": write_file,
+    "edit_file": edit_file,
+    "grep": grep,
+    "bash": bash,
+}

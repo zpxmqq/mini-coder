@@ -1,13 +1,7 @@
 from provider import chat_with_deepseek
-from tool import read_file, write_file, edit_file, grep, bash
+from tool import TOOL_FUNCTIONS
 import json
-TOOL_FUNCTIONS = {
-    "read_file": read_file,
-    "write_file": write_file,
-    "edit_file": edit_file,
-    "grep": grep,
-    "bash": bash,
-}
+
 MAX_ITER = 5
 
 def run(messages: list[dict], tools: list[dict]| None = None) -> str:

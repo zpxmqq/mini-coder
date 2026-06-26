@@ -1,12 +1,30 @@
 from sentence_transformers import SentenceTransformer
 from sentence_transformers import util
+from torch import Tensor
 
 _model = SentenceTransformer("BAAI/bge-small-zh-v1.5")
 
-def embed(texts: list[str]):
+def embed(texts: str | list[str]) -> Tensor:
+    """调用编码函数，将文本编码为向量"""
+
     return _model.encode(texts)
 
-def top_k(query, candidates, k):
+def build_tool_index(tool_schemas: list[dict]) -> list[dict]:
+    """读取tool，将tool转化为工具名称，描述的结构，用来做编码与召回"""
+    tool_index = []
+    for tool in tool_schemas:
+        func = tool["function"]
+        name = func["name"]
+        desc = func["description"]
+        tool_index.append({
+            "name": name,
+            "text": f"{name}: {desc}"
+        })
+
+    return tool_index
+
+def top_k(query: str, candidates: list[str], k: int) -> list[tuple]:
+    """编码向量，并输出匹配度最高的K个工具"""
     query_vec = embed(query)
     candidates_ves = embed(candidates)
 
@@ -16,11 +34,20 @@ def top_k(query, candidates, k):
     
     return pairs_sorted[:k]
 
+def route(query: str, tool_index: list[dict], k: int = 3) -> list[str]:
+    """输入用户问题，返回召回命中的工具名列表"""
+    candidates = [item["text"] for item in tool_index] 
+    results = top_k(query, candidates, k)              
+    names = []                                        
+    for text, score in results:
+        for item in tool_index:
+            if text == item["text"]:
+                names.append(item["name"])                                                   
+    return names
+
 if __name__ == "__main__":
-    tools = [
-        "read_file: 读取指定路径的文件内容",
-        "write_file: 写入内容到指定路径的文件",
-        "bash: 执行系统命令",
-    ]
-    for desc, score in top_k("帮我读取文件", tools, k=2):
-        print(f"{score:.3f}  {desc}")
+    from tool import read_file_tool, write_file_tool, edit_file_tool, grep_tool, bash_tool
+    schemas = [read_file_tool, write_file_tool, edit_file_tool, grep_tool, bash_tool]
+    index = build_tool_index(schemas)
+    for item in index:
+        print(item)
