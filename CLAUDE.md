@@ -125,6 +125,7 @@
 | Day 0 | 06-05 | n/a | uv 装通 / Hello DeepSeek 跑通 / .env 改造 / 三个 ref repo clone | 用约 5 小时,主要在抄+理解,基础比预想更弱(看不懂 traceback、Python 阅读量极少) | Week 1 不赶进度,优先打基础;每写一段代码必须能答 what/why/alternative |
 | Week 1 | 06-06~06-24 | 100%(代码全完成,字典分发重构也做了;录视频可选,未做) | 5 工具(read/write/edit/grep/bash)+ ReAct loop + MAX_ITER + try/except + 危险命令黑名单;复合任务多步调用验证通过;agent.py 已从 5 个 if/elif 重构为 TOOL_FUNCTIONS 字典分发(87→43 行) | 实际有效工作 ~4 天 vs 计划 16 day-unit,大幅超前(Python 基础被低估 + 没抄代码全手写) | Week 2 开始 Skill 二阶段路由(embedding 召回 + LLM 精排);装饰器自动注册工具待工具≥8个再做;bash 安全 Week 6 升级白名单/沙箱;残留 hello_ai.py/test_document.txt 待清理 |
 | Week 2 | 06-25~06-25 | ~90%(召回主干+重构+真数字全完成;README 待补) | embedding 二阶段路由:retriever.py(embed/top_k/route)+ ToolRegistry 类封装工具管理;5真+25假=30工具召回测试 **准确率 10/10=100%,token 7822→1506 节省 81%**;架构重构:召回逻辑从 main 抽到 ToolRegistry,ALL_TOOLS/TOOL_FUNCTIONS 集中到 tool.py,加工具只改一处 | 1 天完成(本地 embedding 比预想顺,bge-small-zh CPU 够用);中途文件丢失重写一次(VS Code 重命名翻车) | W4 复盘:README 写两个数字+为什么两阶段;装饰器注册待工具≥8;**召回局限**:k=3 可能漏工具(复合任务需多工具时),100% 是因假工具区分度高,语义相近工具会降——面试要诚实讲 |
+| Week 3 | 06-26~07-02 | 100%(FastAPI + DB 持久化全做完;用 SQLite 替代原计划 MySQL) | server.py: FastAPI 把 agent 封成 `/chat` POST 接口 + Pydantic ChatRequest 校验;db.py: init_db / create_conversation / add_message / get_messages 四函数;多轮对话验证通过:第二轮带 conversation_id 能正确回答第一轮的信息 | ~3 个有效工作日;从 `Body()` 迁移到 BaseModel 绕了一圈;端到端测试一次通过 | Week 4: Redis 缓存 + 限流 + provider 超时重试(原计划);**SQLite vs MySQL**:面试会被问"为什么不用 MySQL",答:Week 3 先验证 schema 设计正确性,MySQL 迁移只需换连接串(aiomysql),架构代码不动;Week 4-5 抽时间切 |
 
 ---
 
@@ -136,7 +137,7 @@
 |---|---|---|
 | 1 | ReAct loop + 5 原子工具(read/write/edit/bash/grep) | 85% |
 | 2 | Skill 二阶段路由(embedding 召回 + LLM 精排,RAG 雏形) | 65% |
-| 3 | **后端封装**:FastAPI 把 agent 封成 HTTP API + MySQL 持久化对话/记忆 | 70%(JD 强需求,难度可控) |
+| 3 | **后端封装**:FastAPI 把 agent 封成 HTTP API + SQLite 持久化对话/记忆 ✅ | 100%(已完成) |
 | 4 | **后端工程化**:Redis 缓存 + 限流 + provider 层超时重试 + 并发控制 | 65% |
 | 5 | 记忆沉淀闭环(reflection + 复用 Week3 的 MySQL) | 55% |
 | 6 | 权限分级 + Prompt 注入防御 | 65% |
@@ -179,8 +180,8 @@
 | LLM 调用 | OpenAI SDK + DeepSeek ✅ | Week 1 |
 | Agent 内核 | 自写 ReAct loop ✅ | Week 1 |
 | 检索 | embedding + 向量召回 | Week 2 |
-| 接口层 | FastAPI | Week 3 |
-| 持久化 | MySQL | Week 3 |
+| 接口层 | FastAPI ✅ | Week 3 |
+| 持久化 | SQLite ✅(Week 3 验证;后续切 MySQL 只需换连接串) | Week 3 |
 | 缓存/限流 | Redis | Week 4 |
 | 部署 | Docker | Week 8 |
 | 评测 | pytest + 自建任务集 | Week 7 |
