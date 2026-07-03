@@ -1,8 +1,8 @@
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 client: OpenAI | None = None
-
 
 def init_client(api_key: str, base_url: str) -> None:
     """
@@ -14,6 +14,10 @@ def init_client(api_key: str, base_url: str) -> None:
     global client
     client = OpenAI(api_key=api_key, base_url=base_url)
 
+@retry(
+        stop = stop_after_attempt(3),
+        wait = wait_exponential(multiplier=1, min=1, max=10),
+)
 def chat_with_deepseek(messages:list[dict], tools:list[dict]|None=None)->ChatCompletion:
     """
     该函数向deep seek发送聊天请求并返回ChatCompletion对象。

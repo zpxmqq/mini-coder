@@ -94,6 +94,17 @@ def get_messages(conversation_id: int) -> list[dict]:
         messages.append({"role": row[0], "content": row[1]})
     return messages
 
+def check_conversation_id(conversation_id: int) -> bool:
+    """检查一个对话ID是否存在"""
+    conn = pymysql.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT COUNT(*) FROM conversations WHERE id = %s",
+        (conversation_id,)
+    )
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count > 0
 
 if __name__ == "__main__":
     init_db()
