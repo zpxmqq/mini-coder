@@ -82,8 +82,6 @@
 > - Phase A 剩余 8 天：做 `write_file` + `edit_file` 即可，bash/grep 留 Phase C（避免期末夹断）
 > - 第一次 commit 已推 GitHub: https://github.com/zpxmqq/mini-coder
 
-
-
 #### 想消化的知识(每条要能用自己的话讲清楚,不许背)
 
 1. ✅ `def` / `return` / 参数;`return` 跟 `print` 完全不是一回事(B1) — 能口头讲清
@@ -118,6 +116,87 @@
 
 ---
 
+### Week 2 · 2026-06-25 ~ 2026-06-26(实际 1 天完成)
+
+> 原计划 7 天,实际 1 天。本地 embedding 跑得比预想顺,bge-small-zh CPU 够用,无需复杂配置。
+
+#### 想做完的任务
+
+- [x] **R1 retriever.py**(1 day-unit):`embed()` 把文本转向量;`build_tool_index()` 从 schema 列表建候选库;`top_k()` 通用余弦相似度排序(不绑工具概念);`route()` 输入问题返回命中工具名列表 ✅ 6/25
+- [x] **R2 ToolRegistry 类**(0.5):OOP 封装 — `__init__` 接收 ALL_TOOLS → 建 schemas dict + index;`select()` 调 route → 翻译成 schema list ✅ 6/25
+- [x] **R3 假工具构造 + 召回测试**(0.5):25 个假工具 schema(天气/翻译/搜索等)+ 10 个测试用例,验证召回准确率 **100%**,token **7822→1506 节省 81%** ✅ 6/25
+
+#### 想消化的知识
+
+1. ✅ embedding 是什么:把文本映射到高维向量空间,语义相近的向量余弦相似度高 — 能讲清
+2. ✅ 二阶段路由:粗筛(embedding top-k)→ 精排(LLM 选工具),为什么比全量 schema 塞 prompt 省 token
+3. ✅ OOP 基础:`class` / `__init__` / `self` 是什么,为什么 ToolRegistry 比散装函数好
+
+#### 验收标准
+
+- ✅ 召回准确率有真数字(不是"跑通了")
+- ✅ 工具增删只改 `tool.py` 一处,registry 自动感知
+- ✅ 能解释"为什么不是 100% 就安全"——k=3 可能漏工具,语义相近工具会降分
+
+---
+
+### Week 3 · 2026-06-27 ~ 2026-07-02(~3 个有效工作日)
+
+> 第一次接触网络(HTTP/FastAPI)和数据库(SQL/SQLite→MySQL),新概念密度高。
+
+#### 想做完的任务
+
+- [x] **W1 FastAPI 接口**(1 day-unit):`server.py` + `/chat` POST + Pydantic `ChatRequest` 校验 + `uvicorn` 启动 ✅ 6/27
+- [x] **W2 Pydantic 纠错**(0.3):`Body()` 参数 422 报错 → 改用 BaseModel,理解 Pydantic 校验机制 ✅ 6/27
+- [x] **W3 agent 接入 HTTP**(0.2):server.py 调 `registry.select()` + `run()` 返回 `{"reply": answer}` ✅ 6/27
+- [x] **W4 SQLite 持久化**(1):`db.py`: `init_db()` 建表 + `create_conversation()` + `add_message()` + `get_messages()` ✅ 6/28
+- [x] **W5 server.py 集成 DB**(0.5):`ChatRequest` 加 `conversation_id` 可选字段;chat() 逻辑:有 id 查历史 / 无则新建;对话自动入库 ✅ 7/1
+- [x] **W6 MySQL 迁移**(1.5):Windows 装 MySQL 8.4(中文路径踩坑,最终放 `D:\mini_code_temp\`);`sqlite3`→`pymysql`;`?`→`%s`;`AUTOINCREMENT`→`AUTO_INCREMENT`;建库 `mini_coder` + 专用用户 ✅ 7/2
+
+#### 想消化的知识
+
+1. ✅ HTTP 请求/响应:POST 方法、JSON body、状态码 200/404/422/500 — 能用 Swagger `/docs` 自己测试
+2. ✅ FastAPI 装饰器:`@app.post("/chat")` 把函数注册为 HTTP 接口;路径参数 vs 查询参数 vs 请求体
+3. ✅ Pydantic BaseModel:类型校验 + 可选字段(`int | None = None`) + 自动生成 JSON Schema
+4. ✅ SQL 基础:CREATE TABLE / INSERT INTO / SELECT / FOREIGN KEY — 能口头讲清四句话分别干什么
+5. ✅ cursor + commit 模式:为什么 `execute()` 后要 `commit()`;`lastrowid` 拿到刚插入的行 ID
+6. ✅ SQLite vs MySQL 连接差异:文件 vs 独立服务;占位符 `?` vs `%s`;建表语法微小差异
+
+#### 验收标准
+
+- ✅ HTTP → DB 端到端通:第一轮不带 conv_id 自动创建,第二轮带 conv_id 能回答上一轮信息
+- ✅ MySQL 本地服务正常运行,`mini_coder` 库可连接
+- ✅ db.py 接口不变,上层 server.py 无感知切换数据库(这就是抽象层的价值)
+
+#### 踩坑记录
+
+| 坑 | 现象 | 根因 | 解决 |
+|---|---|---|---|
+| Body() 422 | FastAPI 收 JSON body 报 422 | `Body()` 不能直接映射到 `str` | 换 Pydantic BaseModel |
+| MySQL 中文路径 | my.ini/日志文件写入失败 | Windows 用户名是中文,"C:\Users\张朋祥\" 含非 ASCII | 数据目录放 `D:\mini_code_temp\` |
+| redis-py 8.x 不兼容 | `HELLO` 命令报错 | redis-py 8.x 需要 Redis 6+,Win 只有 3.0 | 降级到 redis-py 4.6 |
+| TEXT DEFAULT '' | MySQL 报 1101 错误 | MySQL 严格模式不允许 TEXT 有默认值 | 改 VARCHAR(255) |
+
+---
+
+### Week 4 · 2026-07-03 ~ 2026-07-09(计划)
+
+#### 前置学习(7/3,不写代码)
+
+- [x] 读 gptme 项目结构:对比 agent loop 怎么写、工具怎么注册、跟 mini-coder 的差异
+- [x] 读 smolagents tool 注册方式:装饰器模式 vs 我们的手动字典
+- [x] Redis 概念:SET/GET/EXPIRE,理解"能过期的全局 dict"
+- [x] tenacity 文档 Quick Start
+
+#### 想做完的任务
+
+- [x] **E1 provider 超时重试**(0.5 day-unit):`tenacity` 库,`@retry(stop_after_attempt(3), wait_exponential)` 装饰 `chat_with_deepseek` ✅ 7/4
+- [x] **E2 Redis 缓存**(1):`cache.py`: `get_cache_key(message + schemas → sha256)` / `check_cache` / `set_cache`;TTL 1 小时 ✅ 7/4
+- [x] **E3 限流**(1):固定窗口计数器,同一 IP 每分钟最多 10 次请求;`HTTPException(429)` ✅ 7/4
+- [x] **E4 验证 + 数字**(0.5):`test_w4.py` 12 个测试全部通过(重试 1/缓存 4/限流 4/综合 3) ✅ 7/4
+
+---
+
 ## 五、历史周评估(校准工具)
 
 | Week | 起止 | 计划完成度 | 实际产出 | 偏差与原因 | 下周调整 |
@@ -126,6 +205,7 @@
 | Week 1 | 06-06~06-24 | 100%(代码全完成,字典分发重构也做了;录视频可选,未做) | 5 工具(read/write/edit/grep/bash)+ ReAct loop + MAX_ITER + try/except + 危险命令黑名单;复合任务多步调用验证通过;agent.py 已从 5 个 if/elif 重构为 TOOL_FUNCTIONS 字典分发(87→43 行) | 实际有效工作 ~4 天 vs 计划 16 day-unit,大幅超前(Python 基础被低估 + 没抄代码全手写) | Week 2 开始 Skill 二阶段路由(embedding 召回 + LLM 精排);装饰器自动注册工具待工具≥8个再做;bash 安全 Week 6 升级白名单/沙箱;残留 hello_ai.py/test_document.txt 待清理 |
 | Week 2 | 06-25~06-25 | ~90%(召回主干+重构+真数字全完成;README 待补) | embedding 二阶段路由:retriever.py(embed/top_k/route)+ ToolRegistry 类封装工具管理;5真+25假=30工具召回测试 **准确率 10/10=100%,token 7822→1506 节省 81%**;架构重构:召回逻辑从 main 抽到 ToolRegistry,ALL_TOOLS/TOOL_FUNCTIONS 集中到 tool.py,加工具只改一处 | 1 天完成(本地 embedding 比预想顺,bge-small-zh CPU 够用);中途文件丢失重写一次(VS Code 重命名翻车) | W4 复盘:README 写两个数字+为什么两阶段;装饰器注册待工具≥8;**召回局限**:k=3 可能漏工具(复合任务需多工具时),100% 是因假工具区分度高,语义相近工具会降——面试要诚实讲 |
 | Week 3 | 06-26~07-02 | 100%(FastAPI + DB 持久化全做完;已从 SQLite 迁移到 MySQL) | server.py: FastAPI 把 agent 封成 `/chat` POST 接口 + Pydantic ChatRequest 校验;db.py: init_db / create_conversation / add_message / get_messages 四函数;pymysql 驱动;MySQL 8.4 本地服务 + mini_coder 库 + 专用用户;多轮对话验证通过:第二轮带 conversation_id 能正确回答第一轮的信息 | ~3 个有效工作日;从 `Body()` 迁移到 BaseModel 绕了一圈;端到端测试一次通过;MySQL Windows 安装踩坑:中文路径导致 my.ini 和日志文件写入失败,解决:数据目录放到 `D:\mini_code_temp\` 纯 ASCII 路径 | Week 4: Redis 缓存 + 限流 + provider 超时重试(原计划) |
+| Week 4 | 07-03~07-04 | 100%(tenacity 重试 + Redis 缓存 + 限流 + test_w4.py 12 测试全过) | provider.py: @retry 装饰器;cache.py: Redis 缓存层(sha256 key + TTL);server.py: 固定窗口限流(10次/分钟/ip) + 缓存集成 + conv_id 存在性校验;test_w4.py: 12 个单元测试(重试1/缓存4/限流4) | 模型按计划一天完成(计划 ~3 day-unit);缓存 key 设计经历两轮修正(messages → request.message);W4 原计划"前置学习 1 天+代码 3 天",实际前置学习已在前几天完成 | Week 5: 记忆沉淀闭环(reflection + 复用 MySQL) |
 
 ---
 
@@ -138,7 +218,7 @@
 | 1 | ReAct loop + 5 原子工具(read/write/edit/bash/grep) | 85% |
 | 2 | Skill 二阶段路由(embedding 召回 + LLM 精排,RAG 雏形) | 65% |
 | 3 | **后端封装**:FastAPI 把 agent 封成 HTTP API + SQLite 持久化对话/记忆 ✅ | 100%(已完成) |
-| 4 | **后端工程化**:Redis 缓存 + 限流 + provider 层超时重试 + 并发控制 | 65% |
+| 4 | **后端工程化**:Redis 缓存 + 限流 + provider 层超时重试 + 并发控制 | 100%(已完成) |
 | 5 | 记忆沉淀闭环(reflection + 复用 Week3 的 MySQL) | 55% |
 | 6 | 权限分级 + Prompt 注入防御 | 65% |
 | 7 | 评测搭建 + ablation(SWE-Lite 子集) | 50%(常被低估) |
@@ -149,6 +229,8 @@
 | 机制 | 原计划 | 为何移后 | 完成概率 |
 |---|---|---|---|
 | 主从双 Agent(LangGraph supervisor) | 原 Week 3 | 架构难度大,JD 不要求,性价比低 | 30% |
+| 内存 + RAG(混合检索) | 原计划 | 先做完主线 | 55% |
+| LangChain/LangGraph 封装层 | 新需求 | 自实现 agent loop 后, 用主流框架重新封装做对比, 面试加分 | 60% |
 | 上下文压缩 + DeepSeek 磁盘缓存利用 | 原 Week 4 | 优化向,非 JD 硬需求 | 40% |
 | 流式输出 / Web UI | 始终在列 | 体验向,后端 API 做完再说 | 40% |
 
