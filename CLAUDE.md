@@ -197,6 +197,46 @@
 
 ---
 
+### Week 5 · 2026-07-05 ~ 2026-07-11(计划)
+
+> 目标: 复现 Claude Code 的记忆机制——对话中自动提取知识 → 存 MySQL → 新对话 embedding 检索 → 注入上下文。
+> 这是八周里设计难度最高的一周(原评估完成概率 55%)，不是调包，是设计问题。
+
+#### 想做完的任务
+
+- [x] **E1 db.py 加 memories 表**(0.5 day-unit):`init_db()` 加 `memories` 表(含 embedding JSON 列) + `add_memory()` + `get_all_memories()` 两个函数 ✅ 7/5
+- [x] **E2 新建 memory.py — 记忆检索**(1 day-unit):`retrieve_memories(query, k=5) -> list[str]` — 从 DB 拿所有记忆 → 用 `retriever.top_k()` 做语义检索 → 返回相关内容列表 ✅ 7/5
+- [x] **E3 新建 reflection.py — 自动反思**(1.5 day-unit):`reflect_on_conversation(conversation_id, messages)` — 调 LLM(复用 provider.py)，用"反思 prompt"提取对话中关键事实 → 存 memories 表 ✅ 7/5
+- [x] **E4 server.py 集成 + 测试**(1 day-unit):请求时注入记忆到 system prompt / 回答后触发反思 / `test_w5.py` 9 测试全过 ✅ 7/5
+
+#### 想消化的知识
+
+1. 为什么检索用 embedding 而不是 SQL LIKE？语义匹配 vs 关键词匹配的区别
+2. 反思 prompt 怎么写（不是写代码，是写自然语言指令）
+3. 什么时候触发反思？每 N 轮？对话结束时？按重要性判断？设计权衡
+4. LLM 输出不稳定怎么办（解析失败、输出空值）
+5. embedding 向量如何在 MySQL 里存（JSON 类型）
+6. 同一个 `embed() + top_k()` 之前检索工具、现在检索记忆——用途不同但代码一样
+
+#### 验收标准
+
+- [ ] 同一对话多轮后，系统自动提取用户偏好/事实存进 memories 表
+- [ ] 新对话能基于之前对话提取的记忆回答个性化问题（如"我之前说我叫什么名字？"）
+- [ ] `test_w5.py` 覆盖记忆存储 + 检索 + 反思至少 3 个场景
+- [ ] 能解释"为什么选 k=5""反思触发条件为什么这么设计"
+
+#### 文件改动
+
+| 文件 | E1 | E2 | E3 | E4 | 改动量 |
+|---|---|---|---|---|---|
+| db.py | x | | | | +25行 |
+| memory.py | | x | | | 新建 ~40行 |
+| reflection.py | | | x | | 新建 ~50行 |
+| server.py | | | | x | +10行 |
+| test_w5.py | | | | x | 新建 ~50行 |
+
+---
+
 ## 五、历史周评估(校准工具)
 
 | Week | 起止 | 计划完成度 | 实际产出 | 偏差与原因 | 下周调整 |
@@ -206,6 +246,7 @@
 | Week 2 | 06-25~06-25 | ~90%(召回主干+重构+真数字全完成;README 待补) | embedding 二阶段路由:retriever.py(embed/top_k/route)+ ToolRegistry 类封装工具管理;5真+25假=30工具召回测试 **准确率 10/10=100%,token 7822→1506 节省 81%**;架构重构:召回逻辑从 main 抽到 ToolRegistry,ALL_TOOLS/TOOL_FUNCTIONS 集中到 tool.py,加工具只改一处 | 1 天完成(本地 embedding 比预想顺,bge-small-zh CPU 够用);中途文件丢失重写一次(VS Code 重命名翻车) | W4 复盘:README 写两个数字+为什么两阶段;装饰器注册待工具≥8;**召回局限**:k=3 可能漏工具(复合任务需多工具时),100% 是因假工具区分度高,语义相近工具会降——面试要诚实讲 |
 | Week 3 | 06-26~07-02 | 100%(FastAPI + DB 持久化全做完;已从 SQLite 迁移到 MySQL) | server.py: FastAPI 把 agent 封成 `/chat` POST 接口 + Pydantic ChatRequest 校验;db.py: init_db / create_conversation / add_message / get_messages 四函数;pymysql 驱动;MySQL 8.4 本地服务 + mini_coder 库 + 专用用户;多轮对话验证通过:第二轮带 conversation_id 能正确回答第一轮的信息 | ~3 个有效工作日;从 `Body()` 迁移到 BaseModel 绕了一圈;端到端测试一次通过;MySQL Windows 安装踩坑:中文路径导致 my.ini 和日志文件写入失败,解决:数据目录放到 `D:\mini_code_temp\` 纯 ASCII 路径 | Week 4: Redis 缓存 + 限流 + provider 超时重试(原计划) |
 | Week 4 | 07-03~07-04 | 100%(tenacity 重试 + Redis 缓存 + 限流 + test_w4.py 12 测试全过) | provider.py: @retry 装饰器;cache.py: Redis 缓存层(sha256 key + TTL);server.py: 固定窗口限流(10次/分钟/ip) + 缓存集成 + conv_id 存在性校验;test_w4.py: 12 个单元测试(重试1/缓存4/限流4) | 模型按计划一天完成(计划 ~3 day-unit);缓存 key 设计经历两轮修正(messages → request.message);W4 原计划"前置学习 1 天+代码 3 天",实际前置学习已在前几天完成 | Week 5: 记忆沉淀闭环(reflection + 复用 MySQL) |
+| Week 5 | 07-05 | 100%(记忆存储 + 检索 + 反思 + test_w5.py 9 测试全过) | db.py: memories 表(JSON embedding) + add_memory/get_memories;memory.py: retrieve_memories(query, k=5) 语义检索,复用 retriever.top_k;reflection.py: LLM 反思 prompt 提取用户知识;server.py: 请求时注入记忆 + 回答后触发反思(≥6条消息) | 一天完成;ChatCompletionMessage 混入 messages 导致 isinstance 过滤;W5 原评估完成概率 55% 被低估——retriever 复用节省了大量工作 | Week 6: 权限分级 + Prompt 注入防御 |
 
 ---
 
@@ -219,7 +260,7 @@
 | 2 | Skill 二阶段路由(embedding 召回 + LLM 精排,RAG 雏形) | 65% |
 | 3 | **后端封装**:FastAPI 把 agent 封成 HTTP API + SQLite 持久化对话/记忆 ✅ | 100%(已完成) |
 | 4 | **后端工程化**:Redis 缓存 + 限流 + provider 层超时重试 + 并发控制 | 100%(已完成) |
-| 5 | 记忆沉淀闭环(reflection + 复用 Week3 的 MySQL) | 55% |
+| 5 | 记忆沉淀闭环(reflection + 复用 Week3 的 MySQL) | 100%(已完成) |
 | 6 | 权限分级 + Prompt 注入防御 | 65% |
 | 7 | 评测搭建 + ablation(SWE-Lite 子集) | 50%(常被低估) |
 | 8 | README 终稿 + **Docker 部署** + demo 视频 + 简历整理 | 80% |
