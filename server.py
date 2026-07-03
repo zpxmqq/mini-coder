@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from provider import init_client
 from config import api_key, base_url
@@ -8,6 +9,8 @@ from tool import ALL_TOOLS
 from db import init_db, add_message, create_conversation, get_messages, check_conversation_id
 from cache import get_cache_key, check_cache, set_cache
 import time
+from memory import retrieve_memories
+from reflection import reflect
 
 # 限流配置
 MAX_REQUESTS_PER_MINUTE = 10
@@ -20,6 +23,23 @@ class ChatRequest(BaseModel):
     message: str
     conversation_id: int | None = None
 app = FastAPI()
+
+# 挂载静态文件（聊天 UI）
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# 首页跳转
+@app.get("/")
+def root():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/static/index.html")
+
+# 查历史消息（供前端切换对话使用）
+@app.get("/history/{conversation_id}")
+def get_history(conversation_id: int):
+    if not check_conversation_id(conversation_id):
+        raise HTTPException(status_code=404, detail="对话不存在")
+    return {"conversation_id": conversation_id, "messages": get_messages(conversation_id)}
+
 
 @app.post("/chat")
 def chat(request: ChatRequest, req: Request):
@@ -47,6 +67,10 @@ def chat(request: ChatRequest, req: Request):
     messages.append({"role": "user", "content": request.message})
     add_message(request.conversation_id, "user", request.message)
     schemas = registry.select(request.message, k = 3)
+    relevant = retrieve_memories(request.message, k = 3)
+    if relevant:
+        memory_text = "相关记忆:\n" + "\n".join(f"- {m}" for m in relevant)
+        messages.append({"role": "system", "content": memory_text})
 
     #检查缓存消息
     cache_key = get_cache_key(request.message, schemas)
@@ -58,9 +82,10 @@ def chat(request: ChatRequest, req: Request):
     #运行agent 
     answer = run(messages, tools = schemas)
 
-    #存回答
+    #存回答,存缓存
     add_message(request.conversation_id, "assistant", answer)
     set_cache(cache_key, answer)
+    if len(messages) >= 6:
+        reflect(request.conversation_id, messages)
+        
     return {"reply": answer, "conversation_id": request.conversation_id}
-    
-
