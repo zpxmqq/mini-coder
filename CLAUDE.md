@@ -237,6 +237,45 @@
 
 ---
 
+### Week 6 · 2026-07-06 ~ 2026-07-12(计划)
+
+> 目标: 权限分级 + Prompt 注入防御。当前任何用户都能调 bash 删文件、send 伪系统指令骗 system prompt。
+> 面试后端安全追问必答题——最小权限原则、注入防御怎么设计。
+
+#### 想做完的任务
+
+- [x] **E1 工具 risk_level 分级**(0.5 day-unit):`tool.py` 加 `TOOL_RISK_LEVELS` 字典(low/medium/high) + `agent.py` 的 `run()` 加 `allowed_risk` 参数,执行前检查 ✅ 7/4
+- [x] **E2 server.py 加 permission_level**(0.5 day-unit):`ChatRequest` 加 `permission_level` 字段(默认 user),user 级限 low,admin 级全放行 ✅ 7/4
+- [x] **E3 Prompt 注入防御**(1 day-unit):① system prompt 加固(抗注入指令) ② `security.py` 正则检测,拦截"忽略指令/输出 system prompt"类攻击 ✅ 7/4
+- [x] **E4 测试**(0.5 day-unit):`test_w6.py` 6 测试全过(权限 4 + 注入检测 2) ✅ 7/4
+
+#### 想消化的知识
+
+1. 最小权限原则（Principle of Least Privilege）——为什么默认是 user 而不是 admin
+2. 为什么 bash 比 write_file 危险？write_file 能覆盖文件，bash 能删文件 + 改系统 + 网络外发
+3. Prompt 注入的本质是什么？LLM 无法区分"系统指令"和"用户数据"
+4. 为什么正则预检不调 LLM？省钱 + 零延时 + 不受 LLM 幻觉影响
+5. 安全是深度防御——prompt 层 + 代码层 + 权限层,不能只靠一层
+
+#### 验收标准
+
+- [x] user 级别调 bash 被拒绝,admin 级别能执行 ✅
+- [x] prompt 注入关键词被拦截(400) ✅
+- [x] 正常对话不受影响 ✅
+- [x] `test_w6.py` 6 测试全过 ✅
+
+#### 文件改动
+
+| 文件 | E1 | E2 | E3 | E4 | 改动量 |
+|---|---|---|---|---|---|
+| tool.py | x | | | | +10行(TOOL_RISK_LEVELS + ALLOWED_LEVELS) |
+| agent.py | x | | | | +10行(allowed_risk 参数 + 权限检查) |
+| server.py | | x | x | | +14行(permission_level 字段 + 注入检查 + system prompt 加固) |
+| security.py | | | x | | 新建 17行(正则检测) |
+| test_w6.py | | | | x | 新建 185行(6 测试) |
+
+---
+
 ## 五、历史周评估(校准工具)
 
 | Week | 起止 | 计划完成度 | 实际产出 | 偏差与原因 | 下周调整 |
@@ -247,43 +286,189 @@
 | Week 3 | 06-26~07-02 | 100%(FastAPI + DB 持久化全做完;已从 SQLite 迁移到 MySQL) | server.py: FastAPI 把 agent 封成 `/chat` POST 接口 + Pydantic ChatRequest 校验;db.py: init_db / create_conversation / add_message / get_messages 四函数;pymysql 驱动;MySQL 8.4 本地服务 + mini_coder 库 + 专用用户;多轮对话验证通过:第二轮带 conversation_id 能正确回答第一轮的信息 | ~3 个有效工作日;从 `Body()` 迁移到 BaseModel 绕了一圈;端到端测试一次通过;MySQL Windows 安装踩坑:中文路径导致 my.ini 和日志文件写入失败,解决:数据目录放到 `D:\mini_code_temp\` 纯 ASCII 路径 | Week 4: Redis 缓存 + 限流 + provider 超时重试(原计划) |
 | Week 4 | 07-03~07-04 | 100%(tenacity 重试 + Redis 缓存 + 限流 + test_w4.py 12 测试全过) | provider.py: @retry 装饰器;cache.py: Redis 缓存层(sha256 key + TTL);server.py: 固定窗口限流(10次/分钟/ip) + 缓存集成 + conv_id 存在性校验;test_w4.py: 12 个单元测试(重试1/缓存4/限流4) | 模型按计划一天完成(计划 ~3 day-unit);缓存 key 设计经历两轮修正(messages → request.message);W4 原计划"前置学习 1 天+代码 3 天",实际前置学习已在前几天完成 | Week 5: 记忆沉淀闭环(reflection + 复用 MySQL) |
 | Week 5 | 07-05 | 100%(记忆存储 + 检索 + 反思 + test_w5.py 9 测试全过) | db.py: memories 表(JSON embedding) + add_memory/get_memories;memory.py: retrieve_memories(query, k=5) 语义检索,复用 retriever.top_k;reflection.py: LLM 反思 prompt 提取用户知识;server.py: 请求时注入记忆 + 回答后触发反思(≥6条消息) | 一天完成;ChatCompletionMessage 混入 messages 导致 isinstance 过滤;W5 原评估完成概率 55% 被低估——retriever 复用节省了大量工作 | Week 6: 权限分级 + Prompt 注入防御 |
+| Week 6 | 07-04 | 100%(权限分级 + 注入防御 + test_w6.py 6/6 全过) | tool.py: TOOL_RISK_LEVELS + ALLOWED_LEVELS;agent.py: allowed_risk 参数 + 权限检查;security.py: 新建,正则检测 4 种注入模式;server.py: ChatRequest 加 permission_level + system prompt 加固 + 注入检查前置;6 测试(2 纯数据 + 2 LLM 端到端 + 2 注入检测) | 同一天完成;permission_level="user" 传进 agent 却查 ALLOWED_LEVELS["user"] KeyError——概念混淆:用户角色(user/admin)和风险等级(low/medium/high)是两套体系,没对齐;注入检查初版放在建对话之后,攻击请求能在 DB 留垃圾行——先安检再干活 | Week 7: 评测搭建 + 出数字;W8: Docker + README + 简历 |
 
 ---
 
-## 六、8 周路线(参考,可动态调整)
+## 六、第二阶段：系统深化（2026-07-04 ~ 2026-09 初，约两个月）
 
-> **2026-06-08 重排**:对齐目标岗位 JD,把后端工程化(FastAPI/MySQL/Redis/重试)插进主线,原 Week 3「主从双 Agent」因难度大(45%)+ JD 不要求,移到 stretch backlog(见下表)。**砍 ≠ 删**:前面提前完成就继续做,最终目标仍是全部机制做完。
+> W1-W6 主线功能全部完成。当前系统有完整骨架（ReAct loop + 5 工具 + FastAPI + MySQL + Redis + 记忆闭环 + 安全审查），但工具太少、架构是 ad-hoc 拼接、简历亮点不够厚。
+>
+> 第二阶段目标：**把系统做厚**——增加工具、升级架构、补齐简历上每条亮点背后都能扛追问的能力。
 
-| Week | 主题 | 8 周末完成概率 |
+### 架构目标：可组合的能力协议（贯穿所有深化方向）
+
+> 当前问题：每个模块（Security/Memory/Cache/Reflection）在 `server.py` 的 `chat()` 里手动堆砌。加一个新能力要在 3-4 个地方改代码。
+>
+> 新架构三层抽象：
+
+| 抽象 | 职责 | 例子 |
 |---|---|---|
-| 1 | ReAct loop + 5 原子工具(read/write/edit/bash/grep) | 85% |
-| 2 | Skill 二阶段路由(embedding 召回 + LLM 精排,RAG 雏形) | 65% |
-| 3 | **后端封装**:FastAPI 把 agent 封成 HTTP API + SQLite 持久化对话/记忆 ✅ | 100%(已完成) |
-| 4 | **后端工程化**:Redis 缓存 + 限流 + provider 层超时重试 + 并发控制 | 100%(已完成) |
-| 5 | 记忆沉淀闭环(reflection + 复用 Week3 的 MySQL) | 100%(已完成) |
-| 6 | 权限分级 + Prompt 注入防御 | 65% |
-| 7 | 评测搭建 + ablation(SWE-Lite 子集) | 50%(常被低估) |
-| 8 | README 终稿 + **Docker 部署** + demo 视频 + 简历整理 | 80% |
+| **Tool 类** | 工具自描述（name/description/parameters/risk_level/tags/examples）+ execute | `WebSearchTool`、`ListFilesTool` |
+| **Capability 协议** | 可插拔的能力模块，统一 `on_request`/`on_response` 接口 | `MemoryCapability`、`SecurityCapability`、`CacheCapability` |
+| **AgentPipeline** | 编排层，把 Capability 串成流水线，替代 `chat()` 的手动拼接 | 限流→安检→记忆→缓存→agent→反思 |
 
-### Stretch backlog(主线提前完成则继续做,目标是全部完成)
+> 面试价值：**"我设计了一套可组合的能力协议，每个安全/记忆/缓存模块遵循统一接口，Pipeline 按需编排，增加能力只需新建 Capability 类——不需要改 agent 核心逻辑。"**
 
-| 机制 | 原计划 | 为何移后 | 完成概率 |
-|---|---|---|---|
-| 主从双 Agent(LangGraph supervisor) | 原 Week 3 | 架构难度大,JD 不要求,性价比低 | 30% |
-| 内存 + RAG(混合检索) | 原计划 | 先做完主线 | 55% |
-| LangChain/LangGraph 封装层 | 新需求 | 自实现 agent loop 后, 用主流框架重新封装做对比, 面试加分 | 60% |
-| 上下文压缩 + DeepSeek 磁盘缓存利用 | 原 Week 4 | 优化向,非 JD 硬需求 | 40% |
-| 流式输出 / Web UI | 始终在列 | 体验向,后端 API 做完再说 | 40% |
+---
 
-### 8 周末交付概率分布(初版评估,每周末校准)
+### 深化清单（按优先级）
+
+#### 第一波：做厚基础（1-2 周）
+
+##### D1 · 加工具 + Tool 类化
+
+| 子任务 | 说明 | 消化什么 |
+|---|---|---|
+| D1.1 设计 Tool 基类 | `name`/`description`/`parameters`/`risk_level`/`tags`/`examples`/`execute()`——每个工具是一个自描述对象 | 为什么类比散装 dict+函数好：一处定义、自描述、可扩展 |
+| D1.2 迁移现有 5 工具 | read/write/edit/grep/bash 从散装改为 Tool 类实例 | 重构不改行为——验证抽象层是否正确 |
+| D1.3 加 `list_files` | 列出目录文件，参数：path | 工具的基本模式：输入→处理→返回字符串 |
+| D1.4 加 `create_directory` | 创建目录，参数：path | 同上 |
+| D1.5 加 `web_search` | 调搜索 API，参数：query | 第一个外部 API 工具——需要网络、错误处理、结果截断 |
+| D1.6 加 `web_fetch` | 读 URL 内容，参数：url | 搭配 search 用，agent 能"搜→读→总结" |
+
+**验收**：9 个工具（5 旧 + 4 新）全部 Tool 类化，ToolRegistry 通过 tags 筛选工具子集
+
+##### D2 · Skill 体系升级
+
+| 子任务 | 说明 | 消化什么 |
+|---|---|---|
+| D2.1 Tool 加 tags + examples | 每个工具标注分类标签（file/web/system/search）+ 2-3 个使用示例 | 元信息如何帮助路由——tags 做粗筛，examples 帮 LLM 理解使用场景 |
+| D2.2 Skill 目录分层 | `ALL_TOOLS` → `TOOL_CATEGORIES`（file_tools/web_tools/system_tools），支持按分类注册和检索 | 目录分层的工程意义：工具多了之后按域筛选减少候选集 |
+| D2.3 意图分类器 | 用户 query 进来先判断"要做什么类型的操作"（读文件？搜索？执行命令？），再选对应工具目录 | query 意图识别不是黑魔法——关键词+embedding 就够了 |
+| D2.4 路由升级 | 意图分类 → 目录粗筛 → embedding top-k → LLM 精排（完整四阶段） | 每一层为什么存在、各解决什么问题 |
+
+**验收**：路由准确率在 30+ 工具规模下保持 >90%，token 节省有对比数字
+
+---
+
+#### 第二波：已有模块纵深（1-2 周）
+
+##### D3 · 记忆升级
+
+| 子任务 | 说明 | 消化什么 |
+|---|---|---|
+| D3.1 MemoryCapability | 把 memory.py 的逻辑封成 Capability 类（`on_request` 注入记忆） | 理解协议模式——所有能力模块长一样 |
+| D3.2 记忆自动分类 | reflection 提取时让 LLM 打标签（fact/preference/skill/task），存入 `memory_type` | 为什么分类重要——不同类型记忆有不同的检索优先级和使用场景 |
+| D3.3 记忆去重 | 新记忆跟已有记忆做语义相似度比较，重复的合并而不是新增 | embedding 的另一个用途：不只是检索，还能判断"是不是已经知道了" |
+| D3.4 时间衰减 | 旧记忆的检索分数按时间打折，越久越不重要 | 引入时间维度——不是所有记忆平等 |
+| D3.5 增量索引 | 不再每次 `get_memories()` 扫全表，维护一个内存索引 + 新增时更新 | 性能意识——数据量大了全表扫描不可接受 |
+
+**验收**：50 条记忆中重复的不超过 3 条，旧记忆排序低于新记忆，检索延迟 <50ms
+
+##### D4 · 安全升级
+
+| 子任务 | 说明 | 消化什么 |
+|---|---|---|
+| D4.1 SecurityCapability | 把注入检测+权限检查封成 Capability 类（`on_request` 安检） | 协议复用 |
+| D4.2 路径白名单 | write_file/edit_file/bash 限制在 `D:\mini_code\` + 用户指定安全目录，越界拒绝 | 为什么最小权限还要加路径限制——权限只管"能不能用这个工具"，不管"用在哪" |
+| D4.3 人工确认机制 | high 级工具在 user 模式下触发"此操作有风险，确认执行？"，前端弹窗确认后才执行 | 安全最后一公里——代码拦不住的要交给人判断 |
+
+**验收**：write_file 写 `C:\Windows\` 被拒绝（路径越界）；bash 在 user 模式下弹确认
+
+---
+
+#### 第三波：新能力（2-3 周）
+
+##### D5 · 分层上下文压缩
+
+| 子任务 | 说明 | 消化什么 |
+|---|---|---|
+| D5.1 上下文大小感知 | 实时追踪 messages 的 token 估算，超过阈值触发压缩 | 为什么不等到 MAX_ITER 截断——截断丢上下文，压缩保留关键信息 |
+| D5.2 关键文件识别 | 对话中工具读/写的文件路径记录下来，优先保留在上下文 | 什么是"关键"——agent 操作过的文件比闲聊重要 |
+| D5.3 滑动压缩 | 不压缩最近 N 轮，前面的对话用 LLM 生成结构化摘要替代原文 | 滑动窗口的设计权衡：N 太小丢上下文，N 太大 token 超 |
+| D5.4 结构化笔记 | 压缩产物不是一段摘要文本，而是分块的笔记（做了什么/结果是什么/学到了什么） | 结构化 > 自由文本——方便后续检索和注入 |
+
+**验收**：长对话（20+ 轮）下上下文 token 增长从线性变为亚线性，压缩率 >50%
+
+##### D6 · 流式输出 SSE
+
+| 子任务 | 说明 | 消化什么 |
+|---|---|---|
+| D6.1 provider 流式 | `chat_with_deepseek` 加 `stream=True`，返回 generator | OpenAI SDK 的 stream 模式——每次 yield 一个 chunk |
+| D6.2 `/chat/stream` 端点 | SSE 格式，前端 EventSource 消费 | HTTP 流式协议——不是 WebSocket，是单向推送 |
+| D6.3 Pipeline 适配 | AgentPipeline 支持 streaming 模式，Capability 可以注册 `on_chunk` 回调 | 协议扩展——加新模式不改旧逻辑 |
+
+**验收**：前端打字机效果，首个 token 延迟 <1s
+
+---
+
+#### 第四波：硬骨头（3-4 周）
+
+##### D7 · 主从双 Agent
+
+| 子任务 | 说明 | 消化什么 |
+|---|---|---|
+| D7.1 SubAgent 工具 | 把"调用子 agent"包装成一个 Tool——主 agent 通过 tool call 来 spawn 子 agent | 为什么用 tool call 而不是独立的 agent 通信协议——复用现有基础设施，减少复杂度 |
+| D7.2 子 agent 隔离 | 子 agent 只能访问主 agent 授权的工具子集 + 路径范围 | 权限传递——主 agent 的权限不等于子 agent 的权限 |
+| D7.3 结果最小化 | 子 agent 只返回结构化结果摘要，不返回完整对话历史 | 防止 token 爆炸——子 agent 内部循环不应该污染主 agent 上下文 |
+| D7.4 LangGraph supervisor 实现 | 用 LangGraph 的 StateGraph 重写主从模式做对比 | 自实现 vs 框架——同样的功能，不同实现方式的 trade-off |
+
+**验收**：主 agent 能 spawn 子 agent 读文件并只返回摘要；自实现和 LangGraph 版本有对比
+
+##### D8 · LangChain/LangGraph 封装层
+
+| 子任务 | 说明 | 消化什么 |
+|---|---|---|
+| D8.1 agent_langgraph.py | 用 LangGraph 的 `create_react_agent` 重写 agent loop | 框架替你做了什么——`agent` node + `tools` node + conditional edge |
+| D8.2 自实现 vs LangGraph 对比 | 同一组测试用例跑两个版本：延迟/代码量/token 消耗/错误处理差异 | 框架不是银弹——我们的自实现更轻量（42 行），框架在复杂路由上有优势 |
+| D8.3 跑同一批测试 | 用 test_w1.py 的复合任务在两边跑，出对比数字 | 有数字的对比才有说服力 |
+
+**验收**：对比表完整（延迟/代码量/功能覆盖/错误处理），能讲清"什么时候用框架什么时候自己写"
+
+---
+
+#### 第五波：评价 + 交付（由助手快速完成）
+
+| 任务 | 说明 |
+|---|---|
+| 评测 | 对路由准确率、缓存命中率/延迟对比、注入拦截率、记忆检索召回率做 ablation |
+| Docker | Dockerfile + docker-compose.yml（FastAPI + MySQL + Redis 一键启动） |
+| README | 架构图 + 各模块数字 + 快速开始 |
+| 简历整理 | 3-5 条 bullet，每条带数字 |
+
+---
+
+### 深化清单总览
+
+| 编号 | 方向 | 预计工作量 | 简历对应 | 完成概率 |
+|---|---|---|---|---|
+| D1 | 加工具 + Tool 类化 | 3-4 天 | —（做厚基础） | 90% |
+| D2 | Skill 体系升级 | 3-4 天 | Skill 能力体系 | 75% |
+| D3 | 记忆升级 | 2-3 天 | 自适应记忆沉淀闭环 | 80% |
+| D4 | 安全升级 | 1-2 天 | 权限与安全审查 | 85% |
+| D5 | 上下文压缩 | 3-4 天 | 分层上下文压缩 | 60% |
+| D6 | 流式 SSE | 1-2 天 | —（体验向） | 85% |
+| D7 | 主从双 Agent | 5-6 天 | 主从双 Agent 协作 | 45% |
+| D8 | LangGraph 封装 | 2-3 天 | —（对比加分） | 75% |
+| 评测 | 出数字 | 2-3 天 | 离线评测体系 | — |
+| 交付 | Docker+README+简历 | 2-3 天 | — | — |
+
+**总计**：约 25-35 天有效工作量。两个月（~60 天中有效约 30-40 天）合理但紧凑。D5/D7 有风险，必要时 D7 降级为 stub（只做架构设计不完整实现）。
+
+---
+
+### 简历最终瞄准（每条做完后能扛 3-5 轮追问）
+
+| 简历 bullet | 对应深化 | 可量化的数字 |
+|---|---|---|
+| Skill 分层路由系统：意图识别→目录粗筛→embedding top-k→LLM 精排，支持工具自进化增长下的低噪声检索 | D1+D2 | 路由准确率、token 节省率、不同 k 值的漏报率 |
+| 自适应记忆沉淀：执行→反思→分类存储→去重→时间衰减→按需复用闭环，跨会话上下文复用 | D3 | 检索召回率、去重准确率、检索延迟 |
+| 分层上下文压缩：关键文件识别→滑动窗口→结构化笔记，长对话 token 增长从线性降为亚线性 | D5 | 压缩率、token 节省对比 |
+| 主从双 Agent：主 Agent 统一规划+权限分发，子 Agent 以 Tool Call 被控执行，自实现 vs LangGraph 对比 | D7+D8 | 代码量对比、延迟对比、功能覆盖对比 |
+| 多层安全审查：规则过滤+路径白名单+权限分级+人工确认，4 类注入攻击 100% 拦截 | D4 | 注入拦截率、误拦率 |
+| 离线评测：自建任务样本，路由/缓存/记忆/安全的联合 ablation 对比 | 评测 | 各模块 ablation 数字 |
+
+---
+
+### 8 周末 + 2 月深化后交付概率分布
 
 | 目标 | 概率 |
 |---|---|
-| 完整 6 机制 + 完整评测 + 真数字 | **30%** |
-| 6 机制 + 部分评测 + 真数字 | **40%** |
-| 3-4 机制深做透 + 1-2 stub + 局部评测 | **75%** |
-| 至少 1 个能扛追问的核心机制 | **85%** |
-| 比 daily-planner 更强且能扛追问的项目 | **65%** |
+| D1-D8 全部完成 + 评测 + 简历 6 条 bullet 全有数字 | **40%** |
+| D1-D6 完成 + D7/D8 有对比 demo + 评测 + 4-5 条 bullet | **65%** |
+| D1-D4 深做透 + D5/D6 stub + 评测数字 3-4 个 | **85%** |
+| 至少比 W6 完成时多 3 个可量化数字 + 架构升级 | **95%** |
 
 ---
 

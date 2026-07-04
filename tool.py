@@ -220,3 +220,17 @@ TOOL_FUNCTIONS = {
     "grep": grep,
     "bash": bash,
 }
+
+TOOL_RISK_LEVELS = {
+    "read_file": "low",
+    "grep": "low",
+    "write_file": "medium",
+    "edit_file": "medium",
+    "bash": "high",
+}
+
+ALLOWED_LEVELS = {
+    "low": 1,
+    "medium": 2,
+    "high": 3
+}
