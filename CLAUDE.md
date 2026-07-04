@@ -393,7 +393,51 @@
 
 ---
 
-#### 第四波：硬骨头（3-4 周）
+#### 第四波：自进化 + 可观测性（1-2 周）
+
+##### D9 · RAG 能力
+
+> 来源：[JoshuaC215/agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit)、[Agentic-AI-Pipeline](https://github.com/sabawi/Agentic-RAG-System)——RAG 是 agent 最常见的 Skill 类型，跟 Memory 不同：Memory 是系统自动提取的长期知识，RAG 是用户主动上传的文档检索。
+
+| 子任务 | 说明 | 消化什么 |
+|---|---|---|
+| D9.1 文档上传接口 | `/upload` POST，接收文件 → 切片（chunk_size=500, overlap=50）→ embed → 存向量库 | 为什么切片要 overlap——防止关键信息正好落在边界被切断 |
+| D9.2 向量存储 | 新建 `vector_store.py`，用 numpy 做内存向量索引（先不做 ChromaDB，保持依赖少） | 向量检索底层原理——不是调库，是手写余弦相似度 |
+| D9.3 RAGCapability | `on_request` 时检索相关文档片段 → 注入 system prompt | 复用 Capability 协议——RAG 和 Memory 同样的接口，不同的数据源 |
+| D9.4 文档管理 | 列出已上传文档、删除、查看切片 | CRUD 完整性 |
+
+**验收**：上传一篇 PDF/文本 → 问相关问题 → 回答引用了文档内容
+
+##### D10 · 反馈 + 自进化
+
+> 来源：[JoshuaC215/agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit) 的 star-based feedback + LangSmith 集成。没有反馈就没法自进化——这是简历上"自进化"的真实出处。
+
+| 子任务 | 说明 | 消化什么 |
+|---|---|---|
+| D10.1 反馈接口 | `/feedback` POST：用户对回答点赞/踩（thumbs_up/thumbs_down）→ 存入 `feedback` 表 | 为什么反馈是自进化的燃料——没有信号就没法优化 |
+| D10.2 反馈分析 | 周期性分析踩的回答：哪类 query、选了哪个工具、路由是否正确 → 统计报告 | 数据驱动的路由优化——不是凭感觉调参数 |
+| D10.3 路由权重自调整 | 根据反馈统计，对频繁踩的工具降权、对高频点赞的工具升权 → 影响后续 `registry.select()` | 这就是"自进化"——系统根据真实使用数据自动调整行为 |
+| D10.4 反馈面板 | `/admin/feedback` 页面：查看反馈统计（可按工具/时间/类型筛选） | 可观测性的一部分——看到系统在变好还是变差 |
+
+**验收**：用户踩了某个回答 → 反馈表有记录 → 分析能定位是哪个工具选错了
+
+##### D11 · 可观测性（链路追踪）
+
+> 来源：业界标配（LangSmith/Logfire/Phoenix），没有 trace 的 agent 是黑盒——面试必问"出问题了怎么排查"。
+
+| 子任务 | 说明 | 消化什么 |
+|---|---|---|
+| D11.1 Trace 数据结构 | `AgentTrace`：run_id / iteration / tool_name / tool_args / tool_result / duration_ms / success / timestamp | 每一轮 tool call 都是一条 trace，结构化存储 |
+| D11.2 埋点 | 在 `agent.py` 的 `run()` 里加 trace 记录（调工具前后各打一个点） | 埋点不是事后补——要在核心循环里预留 |
+| D11.3 traces 表 + 查询 | `db.py` 加 `traces` 表 + `get_traces(run_id)` 查询 | 排查问题时 SQL 一查就能看到 agent 的完整执行路径 |
+| D11.4 Trace 可视化页面 | `/admin/traces` 页面：时间线展示每个 run 的工具调用链（调了什么 → 耗时 → 成功/失败） | 面试能讲"我做了可观测性面板，能回溯每次 agent 调用的完整路径" |
+| D11.5 告警规则 | 单次 run 超过 5 轮 tool call 或单工具耗时 >10s → 前端标红 | 不是事后排查，是主动发现问题 |
+
+**验收**：跑一次 agent → `/admin/traces` 能看到完整调用链（每一步工具名 + 耗时 + 成功/失败）
+
+---
+
+#### 第五波：硬骨头（3-4 周）
 
 ##### D7 · 主从双 Agent
 
@@ -439,12 +483,15 @@
 | D4 | 安全升级 | 1-2 天 | 权限与安全审查 | 85% |
 | D5 | 上下文压缩 | 3-4 天 | 分层上下文压缩 | 60% |
 | D6 | 流式 SSE | 1-2 天 | —（体验向） | 85% |
+| D9 | RAG 能力 | 2-3 天 | Skill 能力体系（RAG 场景） | 80% |
+| D10 | 反馈 + 自进化 | 2-3 天 | 自进化增长 | 70% |
+| D11 | 可观测性 | 1-2 天 | 排查问题能力（面试必问） | 85% |
 | D7 | 主从双 Agent | 5-6 天 | 主从双 Agent 协作 | 45% |
 | D8 | LangGraph 封装 | 2-3 天 | —（对比加分） | 75% |
 | 评测 | 出数字 | 2-3 天 | 离线评测体系 | — |
 | 交付 | Docker+README+简历 | 2-3 天 | — | — |
 
-**总计**：约 25-35 天有效工作量。两个月（~60 天中有效约 30-40 天）合理但紧凑。D5/D7 有风险，必要时 D7 降级为 stub（只做架构设计不完整实现）。
+**总计**：约 30-40 天有效工作量。两个月（~60 天中有效约 30-40 天）刚好。D5/D7 有风险，必要时 D7 降级为 stub。
 
 ---
 
@@ -452,11 +499,12 @@
 
 | 简历 bullet | 对应深化 | 可量化的数字 |
 |---|---|---|
-| Skill 分层路由系统：意图识别→目录粗筛→embedding top-k→LLM 精排，支持工具自进化增长下的低噪声检索 | D1+D2 | 路由准确率、token 节省率、不同 k 值的漏报率 |
+| Skill 分层路由系统：意图识别→目录粗筛→embedding top-k→LLM 精排，支持 Skill 自进化增长下的低噪声检索 | D1+D2+D9+D10 | 路由准确率、token 节省率、RAG 检索 Top-3 命中率 |
 | 自适应记忆沉淀：执行→反思→分类存储→去重→时间衰减→按需复用闭环，跨会话上下文复用 | D3 | 检索召回率、去重准确率、检索延迟 |
 | 分层上下文压缩：关键文件识别→滑动窗口→结构化笔记，长对话 token 增长从线性降为亚线性 | D5 | 压缩率、token 节省对比 |
-| 主从双 Agent：主 Agent 统一规划+权限分发，子 Agent 以 Tool Call 被控执行，自实现 vs LangGraph 对比 | D7+D8 | 代码量对比、延迟对比、功能覆盖对比 |
+| 主从双 Agent：主 Agent 统一规划+权限分发，子 Agent 以 Tool Call 被控执行，自实现 vs LangGraph 对比 | D7+D8 | 代码量对比、延迟对比 |
 | 多层安全审查：规则过滤+路径白名单+权限分级+人工确认，4 类注入攻击 100% 拦截 | D4 | 注入拦截率、误拦率 |
+| 全链路可观测：Agent Trace 记录每轮工具调用的耗时/成功/失败，支持可视化回溯与异常告警 | D11 | 平均迭代轮次、工具调用成功率 |
 | 离线评测：自建任务样本，路由/缓存/记忆/安全的联合 ablation 对比 | 评测 | 各模块 ablation 数字 |
 
 ---
