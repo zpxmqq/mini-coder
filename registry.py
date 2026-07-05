@@ -1,5 +1,4 @@
 from retriever import build_tool_index, route
-import re
 
 # ── D2.2: 按 tags 自动分组 ──
 # 一个工具可能属于多个分类（如 web_search 同时在 ["web", "search"]）
@@ -33,7 +32,6 @@ _INTENT_KEYWORDS = {
     "create":  ["创建", "新建", "生成"],
     "delete":  ["删除", "移除"],
 }
-
 
 def _classify_intent(query: str) -> set[str]:
     """阶段 1：关键词匹配 → 返回命中的分类集合"""
