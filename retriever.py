@@ -14,22 +14,19 @@ def embed(texts: str | list[str]) -> Tensor:
 
     return _model.encode(texts)
 
-def build_tool_index(tool_schemas: list[dict]) -> list[dict]:
+def build_tool_index(tool_schemas: list) -> list[dict]:
     """
-    把工具 schema 列表转成召回用的候选库。
+    把工具列表转成召回用的候选库。
 
-    输入为完整的 tool schema 列表，输出为 list[dict]，每项含两个字段:
+    输入为 Tool 实例列表，输出为 list[dict]，每项含两个字段:
     - name: 工具名(召回命中后用它反查对应的完整 schema)
     - text: name+描述拼接(用于向量编码、算相似度)
     """
     tool_index = []
     for tool in tool_schemas:
-        func = tool["function"]
-        name = func["name"]
-        desc = func["description"]
         tool_index.append({
-            "name": name,
-            "text": f"{name}: {desc}"
+            "name": tool.name,
+            "text": f"{tool.name}: {tool.description}"
         })
 
     return tool_index
@@ -70,8 +67,7 @@ def route(query: str, tool_index: list[dict], k: int = 3) -> list[str]:
     return names
 
 if __name__ == "__main__":
-    from tool import read_file_tool, write_file_tool, edit_file_tool, grep_tool, bash_tool
-    schemas = [read_file_tool, write_file_tool, edit_file_tool, grep_tool, bash_tool]
-    index = build_tool_index(schemas)
+    from tool import ALL_TOOLS
+    index = build_tool_index(ALL_TOOLS)
     for item in index:
         print(item)

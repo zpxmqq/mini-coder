@@ -5,9 +5,11 @@ description = "这是一个关于agent的练手项目，我们的最终成品是
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "duckduckgo-search>=8.1.1",
     "fastapi>=0.138.2",
     "openai>=2.41.0",
     "python-dotenv>=1.2.2",
+    "requests>=2.34.2",
     "sentence-transformers>=5.6.0",
     "uvicorn>=0.49.0",
 ]

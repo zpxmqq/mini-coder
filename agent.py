@@ -1,5 +1,5 @@
 from provider import chat_with_deepseek
-from tool import TOOL_FUNCTIONS, TOOL_RISK_LEVELS, ALLOWED_LEVELS
+from tool import ALLOWED_LEVELS, ALL_TOOLS
 import json
 
 MAX_ITER = 5
@@ -17,19 +17,22 @@ def run(messages: list[dict], tools: list[dict] | None = None, allowed_risk: str
 
         for tc in msg.tool_calls:
             name = tc.function.name
-            func = TOOL_FUNCTIONS.get(name)
+            for tool in ALL_TOOLS:
+                if tool.name == name:
+                    func = tool
+                    break
             if func is None:
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": f"未知工具:{name}"})
                 continue
 
-            tool_risk = TOOL_RISK_LEVELS.get(name, "high")
+            tool_risk = tool.risk_level
             if ALLOWED_LEVELS[tool_risk] > ALLOWED_LEVELS[allowed_risk]:
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": f"权限不足：工具 {name} 需要 {tool_risk} 级权限，当前只有 {allowed_risk} 级"})
                 continue
 
             try:
                 args = json.loads(tc.function.arguments)
-                result = func(**args)
+                result = tool.execute(**args)
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
             except Exception as e:
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": f"工具执行失败: {e}"})
