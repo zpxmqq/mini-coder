@@ -19,7 +19,6 @@ DB_CONFIG = {
       "charset": "utf8mb4",
   }
 
-
 def init_db() -> None:
     """初始化数据库：创建表（如果不存在）。
 
