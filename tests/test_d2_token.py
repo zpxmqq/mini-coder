@@ -4,8 +4,8 @@ D2 路由对比：旧路由（全量 30 工具）vs 新路由（四阶段）
 """
 
 import json
-from tool import ALL_TOOLS
-from registry import ToolRegistry, _classify_intent, _build_categories
+from core.tool import ALL_TOOLS
+from core.registry import ToolRegistry, _classify_intent, _build_categories
 
 # 初始化
 registry = ToolRegistry(ALL_TOOLS)

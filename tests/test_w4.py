@@ -32,7 +32,7 @@ def test_retry():
 # 测试 2: Redis cache
 # ============================================================
 def test_cache():
-    from cache import get_cache_key, check_cache, set_cache, r
+    from infra.cache import get_cache_key, check_cache, set_cache, r
 
     fake_schemas = [
         {"function": {"name": "read_file"}},

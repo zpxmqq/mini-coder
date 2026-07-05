@@ -1,5 +1,5 @@
-from provider import chat_with_deepseek
-from tool import ALLOWED_LEVELS, ALL_TOOLS
+from core.provider import chat_with_deepseek
+from core.tool import ALLOWED_LEVELS, ALL_TOOLS
 import json
 
 MAX_ITER = 5

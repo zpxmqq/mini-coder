@@ -1,5 +1,5 @@
-from db import get_memories
-from retriever import top_k
+from infra.db import get_memories
+from core.retriever import top_k
 
 def retrieve_memories(query:str, k: int = 5) -> list[dict]:
     """

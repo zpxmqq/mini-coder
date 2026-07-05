@@ -5,13 +5,13 @@
 可直接组合进 AgentPipeline 使用。
 """
 
-from capability import Capability, PipelineContext
-from security import check_prompt_injection
-from tool import ALLOWED_LEVELS
-from memory import retrieve_memories
-from reflection import reflect
-from cache import get_cache_key, check_cache, set_cache
-from db import create_conversation, get_messages, check_conversation_id, add_message
+from capabilities.base import Capability, PipelineContext
+from infra.security import check_prompt_injection
+from core.tool import ALLOWED_LEVELS
+from infra.memory import retrieve_memories
+from infra.reflection import reflect
+from infra.cache import get_cache_key, check_cache, set_cache
+from infra.db import create_conversation, get_messages, check_conversation_id, add_message
 import time
 
 

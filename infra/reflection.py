@@ -1,5 +1,5 @@
-from provider import chat_with_deepseek
-from db import add_memory
+from core.provider import chat_with_deepseek
+from infra.db import add_memory
 
 REFERENCE_PROMPT = """
 你是一个记忆提取助手。请从以下对话中提取关于用户的**关键信息**，只提取以下两类：

@@ -1,14 +1,14 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from provider import init_client
+from core.provider import init_client
 from config import api_key, base_url
-from agent import run
-from registry import ToolRegistry
-from tool import ALL_TOOLS
-from db import init_db, add_message, get_messages, check_conversation_id
-from capability import AgentPipeline, PipelineContext
-from builtin_capabilities import (
+from core.agent import run
+from core.registry import ToolRegistry
+from core.tool import ALL_TOOLS
+from infra.db import init_db, add_message, get_messages, check_conversation_id
+from capabilities.base import AgentPipeline, PipelineContext
+from capabilities.builtin import (
     SecurityCapability,
     ConversationCapability,
     MemoryCapability,

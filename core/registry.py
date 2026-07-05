@@ -1,4 +1,4 @@
-from retriever import build_tool_index, route
+from core.retriever import build_tool_index, route
 
 # ── D2.2: 按 tags 自动分组 ──
 # 一个工具可能属于多个分类（如 web_search 同时在 ["web", "search"]）

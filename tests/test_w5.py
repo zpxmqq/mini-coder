@@ -9,7 +9,7 @@ import sys
 # 测试 1: 记忆存储与读取
 # ============================================================
 def test_memory_storage():
-    from db import add_memory, get_memories
+    from infra.db import add_memory, get_memories
     import pymysql
 
     # 先插入一条记忆
@@ -40,8 +40,8 @@ def test_memory_storage():
 # 测试 2: 记忆检索
 # ============================================================
 def test_memory_retrieval():
-    from db import add_memory, get_memories
-    from memory import retrieve_memories
+    from infra.db import add_memory, get_memories
+    from infra.memory import retrieve_memories
     import pymysql
 
     # 先取出已有的记忆数
@@ -72,7 +72,7 @@ def test_memory_retrieval():
 # 测试 3: 反思函数（不调 LLM，只测输入输出逻辑）
 # ============================================================
 def test_reflection_structure():
-    from reflection import REFERENCE_PROMPT, reflect
+    from infra.reflection import REFERENCE_PROMPT, reflect
 
     # 确认 prompt 模板包含必要字段
     assert "长期信息" in REFERENCE_PROMPT, "Prompt should mention 长期信息"

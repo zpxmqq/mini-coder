@@ -1,8 +1,8 @@
-from provider import init_client
+from core.provider import init_client
 from config import api_key, base_url
-from tool import ALL_TOOLS
-from agent import run
-from registry import ToolRegistry
+from core.tool import ALL_TOOLS
+from core.agent import run
+from core.registry import ToolRegistry
 
 def main() -> None:
 
