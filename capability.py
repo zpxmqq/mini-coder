@@ -1,5 +1,5 @@
 """
-D0 架构：Capability 协议 + AgentPipeline
+架构：Capability 协议 + AgentPipeline
 
 设计目的：让 Security/Memory/Cache/Reflection 等模块遵循统一接口，
 通过 Pipeline 按需编排，替代 server.py 里 chat() 的手动堆砌。
