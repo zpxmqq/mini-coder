@@ -1,0 +1,39 @@
+=== 回退与恢复计划 ===
+
+当前状态 (2026-07-06):
+  分支: master (仅 D0 版本)
+  提交: 2952dfd D0-结构: 重构为五层模块化架构
+  文件数: 23 个 .py 文件
+  总行数: 2284 行
+
+D0 版本内容:
+  五层模块化架构:
+    capabilities/  - Capability 基类 + 5 个内置能力
+    core/         - agent.py (42行 while 循环), tool.py (30工具),
+                    registry.py (四阶段路由), retriever.py (embedding),
+                    provider.py (DeepSeek + tenacity)
+    infra/         - db.py (MySQL 3表), cache.py (Redis),
+                    memory.py, reflection.py, security.py
+    server.py      - FastAPI 入口 (AgentPipeline)
+    tests/         - W4/W5/W6 测试 + D2 token 测试
+
+D3-D11 补丁内容:
+  D3:  记忆升级 (分类+去重+时间衰减)
+  D4:  安全升级 (路径白名单+人工确认)
+  D5:  上下文压缩 (滑动窗口+结构化摘要)
+  D6:  流式 SSE
+  D9:  RAG (向量存储+文档上传)
+  D10: 反馈自进化
+  D11: 可观测性 (链路追踪+可视化面板)
+  D7:  主从双 Agent
+  D8:  LangGraph 封装层
+  Skill: 10 个高层 Skill + 意图模板路由
+  评测: 173+ 样本 (93路由 + 50注入 + 20去重 + 10 SWE-Lite)
+
+补丁文件:
+  D:\mini_code_d3_d11.patch     - 代码补丁 (113KB)
+  D:\mini_code_claude_d3_d11.patch - CLAUDE.md 补丁 (11KB)
+
+逐步恢复方式:
+  git apply ../mini_code_d3_d11.patch  # 一次性恢复全部
+  git log 2952dfd..936d013 --oneline   # 查看所有 D3-D11 提交 (之后手动恢复)
