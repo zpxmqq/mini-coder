@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from core.provider import init_client
 from config import api_key, base_url
-from core.agent import run
+from core.agent import run as agent_run
 from core.registry import ToolRegistry
 from core.tool import ALL_TOOLS
 from infra.db import init_db, add_message, get_messages, check_conversation_id
@@ -55,15 +55,6 @@ def get_history(conversation_id: int):
 
 @app.post("/chat")
 def chat(request: ChatRequest):
-    # ── 构建 Pipeline ──
-    pipeline = AgentPipeline([
-        SecurityCapability(),
-        ConversationCapability(),
-        MemoryCapability(),
-        CacheCapability(),
-        ReflectionCapability(),
-    ])
-
     # ── 准备上下文 ──
     ctx = PipelineContext()
     ctx.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -76,13 +67,24 @@ def chat(request: ChatRequest):
         add_message(conv_id, "user", request.message)
 
     # ── 阶段 1: on_request ──
+    pipeline = AgentPipeline([
+        SecurityCapability(),
+        ConversationCapability(),
+        MemoryCapability(),
+        CacheCapability(),
+        ReflectionCapability(),
+    ])
+
     for cap in pipeline.capabilities:
         should_stop, ctx, short_answer = cap.on_request(request, ctx)
         if should_stop:
             return {"reply": short_answer, "conversation_id": ctx.conversation_id}
 
     # ── 阶段 2: agent ──
-    answer = run(ctx.messages, tools=ctx.schemas, allowed_risk=request.permission_level)
+    def _run_agent(messages, schemas, permission_level):
+        return agent_run(messages, tools=schemas, allowed_risk=permission_level)
+
+    answer = _run_agent(ctx.messages, ctx.schemas, request.permission_level)
 
     # ── 阶段 3: on_response ──
     for cap in pipeline.capabilities:
