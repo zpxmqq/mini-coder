@@ -63,15 +63,38 @@ class ConversationCapability(Capability):
 
 
 class MemoryCapability(Capability):
-    """记忆：检索相关记忆 → 注入 system prompt"""
+    """记忆：检索相关记忆 → 按类型注入 system prompt"""
 
     def on_request(self, request, context):
         relevant = retrieve_memories(request.message, k=3)
         if relevant:
-            memory_text = "相关记忆:\n" + "\n".join(f"- {m}" for m in relevant)
-            context.messages.append({"role": "system", "content": memory_text})
-        return False, context, None
+            grouped = {
+                "fact": [],
+                "preference": [],
+                "reference": [],
+            }
+            for memory in relevant:
+                memory_type = memory.get("memory_type", "fact")
+                content = memory.get("content", "")
+                if memory_type in grouped and content:
+                    grouped[memory_type].append(content)
 
+            labels = {
+                "fact": "长期事实",
+                "preference": "用户偏好",
+                "reference": "参考背景",
+            }
+            sections = []
+            for memory_type in ("fact", "preference", "reference"):
+                contents = grouped[memory_type]
+                if contents:
+                    section = labels[memory_type] + ":\n" + "\n".join(f"- {content}" for content in contents)
+                    sections.append(section)
+
+            if sections:
+                memory_text = "相关记忆:\n" + "\n\n".join(sections)
+                context.messages.append({"role": "system", "content": memory_text})
+        return False, context, None
 
 class CacheCapability(Capability):
     """缓存：检查缓存 → 命中直接返回 / 未命中存缓存"""
@@ -96,5 +119,8 @@ class ReflectionCapability(Capability):
 
     def on_response(self, answer, context):
         if context.conversation_id and len(context.messages) >= self.min_messages:
-            reflect(context.conversation_id, context.messages)
+            messages_for_reflection = context.messages + [
+                {"role": "assistant", "content": answer}
+            ]
+            reflect(context.conversation_id, messages_for_reflection)
         return answer

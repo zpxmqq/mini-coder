@@ -158,6 +158,17 @@ def get_memories() -> list[dict]:
     
     return memories
 
+def memory_exists(content: str, memory_type: str) -> bool:
+    """检查同类型、同内容的记忆是否已经存在。"""
+    conn = pymysql.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT COUNT(*) FROM memories WHERE content = %s AND memory_type = %s",
+        (content, memory_type),
+    )
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count > 0
 if __name__ == "__main__":
     init_db()
     print("数据库初始化完成")
