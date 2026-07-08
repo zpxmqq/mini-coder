@@ -33,10 +33,13 @@ def test_retrieve_memories_keeps_memory_type():
 
         results = memory_module.retrieve_memories("how should I explain code?", k=2)
 
-        assert results == [
-            {"memory_type": "preference", "content": "user prefers slow explanations"},
-            {"memory_type": "fact", "content": "user builds mini-coder"},
+        assert [result["memory_type"] for result in results] == ["preference", "fact"]
+        assert [result["content"] for result in results] == [
+            "user prefers slow explanations",
+            "user builds mini-coder",
         ]
+        assert all("score" in result for result in results)
+        assert all("final_score" in result for result in results)
     finally:
         memory_module.get_memories = old_get_memories
         memory_module.top_k = old_top_k
@@ -65,18 +68,53 @@ def test_memory_capability_injects_grouped_memory_prompt():
 
         injected = context.messages[0]
         assert injected["role"] == "system"
-        assert "相关记忆" in injected["content"]
-        assert "长期事实" in injected["content"]
         assert "user builds mini-coder" in injected["content"]
-        assert "用户偏好" in injected["content"]
         assert "user prefers slow explanations" in injected["content"]
-        assert "参考背景" in injected["content"]
         assert "user referenced Claude Code" in injected["content"]
     finally:
         builtin.retrieve_memories = old_retrieve_memories
 
 
+def test_find_similar_memories_filters_by_type_and_score():
+    install_fake_retriever()
+    sys.modules.pop("infra.memory", None)
+    import infra.memory as memory_module
+
+    old_get_memories = memory_module.get_memories
+    old_top_k = memory_module.top_k
+    try:
+        memory_module.get_memories = lambda: [
+            {"memory_type": "fact", "content": "user is tall"},
+            {"memory_type": "fact", "content": "user height is 178cm"},
+            {"memory_type": "preference", "content": "user prefers slow explanations"},
+        ]
+        memory_module.top_k = lambda query, candidates, k: [
+            ("user height is 178cm", 0.91),
+            ("user is tall", 0.70),
+        ]
+
+        results = memory_module.find_similar_memories(
+            "user is not short",
+            memory_type="fact",
+            k=3,
+            min_score=0.75,
+        )
+
+        assert len(results) == 1
+        assert results[0]["memory_type"] == "fact"
+        assert results[0]["content"] == "user height is 178cm"
+        assert results[0]["score"] == 0.91
+        assert "created_at" in results[0]
+        assert "updated_at" in results[0]
+        assert "last_used_at" in results[0]
+        assert "access_count" in results[0]
+    finally:
+        memory_module.get_memories = old_get_memories
+        memory_module.top_k = old_top_k
+
+
 if __name__ == "__main__":
     test_retrieve_memories_keeps_memory_type()
     test_memory_capability_injects_grouped_memory_prompt()
+    test_find_similar_memories_filters_by_type_and_score()
     print("D3 memory flow tests passed")

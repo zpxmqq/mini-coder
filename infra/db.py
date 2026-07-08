@@ -19,6 +19,27 @@ DB_CONFIG = {
       "charset": "utf8mb4",
   }
 
+
+def _memory_column_exists(cursor, column_name: str) -> bool:
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'memories'
+          AND COLUMN_NAME = %s
+        """,
+        (column_name,),
+    )
+    return cursor.fetchone()[0] > 0
+
+
+def _add_memory_column_if_missing(cursor, column_name: str, column_definition: str) -> None:
+    if _memory_column_exists(cursor, column_name):
+        return
+    cursor.execute(f"ALTER TABLE memories ADD COLUMN {column_name} {column_definition}")
+
+
 def init_db() -> None:
     """初始化数据库：创建表（如果不存在）。
 
@@ -58,9 +79,20 @@ def init_db() -> None:
             embedding JSON,
             memory_type VARCHAR(50) DEFAULT 'fact',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            last_used_at TIMESTAMP NULL,
+            access_count INTEGER DEFAULT 0,
             FOREIGN KEY (conversation_id) REFERENCES conversations(id)
         )
 """)
+
+    _add_memory_column_if_missing(
+        cursor,
+        "updated_at",
+        "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+    )
+    _add_memory_column_if_missing(cursor, "last_used_at", "TIMESTAMP NULL")
+    _add_memory_column_if_missing(cursor, "access_count", "INTEGER DEFAULT 0")
     
     conn.commit()   # 提交所有操作
     conn.close()    # 关闭连接
@@ -139,24 +171,77 @@ def add_memory(conversation_id: int, content: str, embedding: list[float] | None
     conn.close()
     return memory_id
 
+def update_memory(
+    memory_id: int,
+    content: str,
+    memory_type: str,
+    embedding: list[float] | None = None,
+) -> None:
+    conn = pymysql.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    embedding_json = json.dumps(embedding) if embedding is not None else None
+    cursor.execute(
+        """
+        UPDATE memories
+        SET content = %s,
+            memory_type = %s,
+            embedding = %s,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = %s
+        """,
+        (content, memory_type, embedding_json, memory_id),
+    )
+    conn.commit()
+    conn.close()
+
 def get_memories() -> list[dict]:
     """
     从 memories 表中获取所有记忆，并返回一个包含字典的列表，
-    每个字典包含 content、embedding 和 memory_type
+    每个字典包含 id, content、embedding 和 memory_type
     """
     conn = pymysql.connect(**DB_CONFIG)
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT content, embedding, memory_type FROM memories"
+        "SELECT id, content, embedding, memory_type, created_at, updated_at, last_used_at, access_count FROM memories"
     )
     rows = cursor.fetchall()
     conn.close()
     memories = []
     for row in rows:
-        embedding = json.loads(row[1]) if row[1] is not None else None
-        memories.append({"content": row[0], "embedding": embedding, "memory_type": row[2]})
+        embedding = json.loads(row[2]) if row[2] is not None else None
+        memories.append({
+            "id": row[0],
+            "content": row[1],
+            "embedding": embedding,
+            "memory_type": row[3],
+            "created_at": row[4],
+            "updated_at": row[5],
+            "last_used_at": row[6],
+            "access_count": row[7],
+        })
     
     return memories
+
+
+def mark_memories_used(memory_ids: list[int]) -> None:
+    """Record that selected memories were injected into a prompt."""
+    if not memory_ids:
+        return
+
+    conn = pymysql.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    placeholders = ", ".join(["%s"] * len(memory_ids))
+    cursor.execute(
+        f"""
+        UPDATE memories
+        SET last_used_at = CURRENT_TIMESTAMP,
+            access_count = access_count + 1
+        WHERE id IN ({placeholders})
+        """,
+        tuple(memory_ids),
+    )
+    conn.commit()
+    conn.close()
 
 def memory_exists(content: str, memory_type: str) -> bool:
     """检查同类型、同内容的记忆是否已经存在。"""
@@ -169,6 +254,8 @@ def memory_exists(content: str, memory_type: str) -> bool:
     count = cursor.fetchone()[0]
     conn.close()
     return count > 0
+
+
 if __name__ == "__main__":
     init_db()
     print("数据库初始化完成")

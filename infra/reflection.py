@@ -1,10 +1,11 @@
 ﻿import json
-
+from infra.memory import find_similar_memories
 from core.provider import chat_with_deepseek
-from infra.db import add_memory, memory_exists
+from infra.db import add_memory, memory_exists, update_memory
 
 
 ALLOWED_MEMORY_TYPES = {"fact", "preference", "reference"}
+ALLOWED_MERGE_ACTIONS = {"skip", "replace", "keep_both"}
 
 REFERENCE_PROMPT = """
 你是一个记忆提取助手。请从下面的对话中提取长期有价值的记忆。
@@ -30,6 +31,37 @@ REFERENCE_PROMPT = """
 {conversation_history}
 """
 
+MERGE_DECISION_PROMPT = """
+你是一个记忆合并判断助手。请判断新记忆和相似旧记忆之间的关系。
+
+允许的 action 只有三个：
+- skip：新记忆和某条旧记忆重复，不需要新增
+- replace：新记忆比某条旧记忆更具体或更新，后续应该替换旧记忆
+- keep_both：新记忆和旧记忆都应该保留
+判断时请参考相似旧记忆中的时间和使用字段：
+- created_at：旧记忆第一次创建时间
+- updated_at：旧记忆最近一次被修正或替换的时间
+- last_used_at：旧记忆最近一次被注入上下文的时间
+- access_count：旧记忆被注入上下文的次数
+
+如果新记忆明显比旧记忆更新、更具体，可以选择 replace。
+如果旧记忆经常被使用，且新记忆只是轻微改写，请谨慎 replace。
+如果新旧记忆表达的是不同事实，请选择 keep_both。
+请只输出 JSON 对象，不要输出 Markdown，不要输出解释。
+格式如下：
+{{
+  "action": "skip | replace | keep_both",
+  "target_content": "被命中的旧记忆 content；如果 action 是 keep_both，则为 null",
+  "reason": "一句话说明原因"
+}}
+
+新记忆：
+{new_memory}
+
+相似旧记忆：
+{similar_memories}
+"""
+
 
 def _normalize_llm_json(raw_text: str) -> str:
     """Return the JSON-looking part of an LLM response."""
@@ -42,11 +74,29 @@ def _normalize_llm_json(raw_text: str) -> str:
             lines = lines[:-1]
         text = "\n".join(lines).strip()
 
-    start = text.find("[")
-    end = text.rfind("]")
-    if start != -1 and end != -1 and start <= end:
-        return text[start : end + 1]
+    array_start = text.find("[")
+    array_end = text.rfind("]")
+    object_start = text.find("{")
+    object_end = text.rfind("}")
+
+    candidates = []
+    if array_start != -1 and array_end != -1 and array_start <= array_end:
+        candidates.append((array_start, array_end + 1))
+    if object_start != -1 and object_end != -1 and object_start <= object_end:
+        candidates.append((object_start, object_end + 1))
+
+    if candidates:
+        start, end = min(candidates, key=lambda pair: pair[0])
+        return text[start:end]
     return text
+
+
+def _default_merge_decision(reason: str = "Invalid merge decision") -> dict:
+    return {
+        "action": "keep_both",
+        "target_content": None,
+        "reason": reason,
+    }
 
 
 def parse_typed_memories(raw_text: str) -> list[dict[str, str]]:
@@ -81,6 +131,64 @@ def parse_typed_memories(raw_text: str) -> list[dict[str, str]]:
     return memories
 
 
+def parse_merge_decision(raw_text: str, similar_memories: list[dict]) -> dict:
+    """Parse and validate an LLM memory-merge decision."""
+    try:
+        data = json.loads(_normalize_llm_json(raw_text))
+    except json.JSONDecodeError:
+        return _default_merge_decision()
+
+    if not isinstance(data, dict):
+        return _default_merge_decision()
+
+    action = str(data.get("action", "")).strip().lower()
+    if action not in ALLOWED_MERGE_ACTIONS:
+        return _default_merge_decision(f"Invalid action: {action}")
+
+    reason = str(data.get("reason", "")).strip()
+    target_content = data.get("target_content")
+    candidate_contents = {memory.get("content") for memory in similar_memories}
+
+    if action == "keep_both":
+        return {
+            "action": "keep_both",
+            "target_content": None,
+            "reason": reason,
+        }
+
+    if target_content not in candidate_contents:
+        return _default_merge_decision("Target content is not in similar memories")
+
+    return {
+        "action": action,
+        "target_content": target_content,
+        "reason": reason,
+    }
+
+
+def decide_memory_merge(new_memory: dict, similar_memories: list[dict]) -> dict:
+    """Ask the LLM whether a new memory should be skipped, replaced, or kept."""
+    if not similar_memories:
+        return _default_merge_decision("No similar memories")
+
+    prompt = MERGE_DECISION_PROMPT.format(
+        new_memory=json.dumps(new_memory, ensure_ascii=False),
+        similar_memories=json.dumps(similar_memories, ensure_ascii=False),
+    )
+    resp = chat_with_deepseek([{"role": "user", "content": prompt}])
+    raw_result = resp.choices[0].message.content or ""
+    return parse_merge_decision(raw_result, similar_memories)
+
+
+def _find_merge_target(decision: dict, similar_memories: list[dict]) -> dict | None:
+    """Find the existing memory selected by a validated merge decision."""
+    target_content = decision.get("target_content")
+    for memory in similar_memories:
+        if memory.get("content") == target_content:
+            return memory
+    return None
+
+
 def reflect(conversation_id: int, messages: list[dict]) -> list[dict[str, str]]:
     """Extract typed memories from a conversation and store valid ones."""
     conv_text = "\n".join(
@@ -100,11 +208,35 @@ def reflect(conversation_id: int, messages: list[dict]) -> list[dict[str, str]]:
     for memory in memories:
         if memory_exists(memory["content"], memory["memory_type"]):
             continue
+
+        similar_memories = find_similar_memories(
+            content=memory["content"],
+            memory_type=memory["memory_type"],
+            k=3,
+            min_score=0.75,
+        )
+        decision = decide_memory_merge(memory, similar_memories)
+
+        if decision["action"] == "skip":
+            continue
+
+        if decision["action"] == "replace":
+            target_memory = _find_merge_target(decision, similar_memories)
+            if target_memory is not None:
+                update_memory(
+                    memory_id=target_memory["id"],
+                    content=memory["content"],
+                    embedding=None,
+                    memory_type=memory["memory_type"],
+                )
+                stored_memories.append(memory)
+                continue
+
         add_memory(
-            conversation_id = conversation_id,
-            content = memory["content"],
-            embedding = None,
-            memory_type = memory["memory_type"],
+            conversation_id=conversation_id,
+            content=memory["content"],
+            embedding=None,
+            memory_type=memory["memory_type"],
         )
         stored_memories.append(memory)
 

@@ -11,7 +11,7 @@ from core.tool import ALLOWED_LEVELS
 from infra.memory import retrieve_memories
 from infra.reflection import reflect
 from infra.cache import get_cache_key, check_cache, set_cache
-from infra.db import create_conversation, get_messages, check_conversation_id, add_message
+from infra.db import create_conversation, get_messages, check_conversation_id, add_message, mark_memories_used
 import time
 
 
@@ -73,11 +73,14 @@ class MemoryCapability(Capability):
                 "preference": [],
                 "reference": [],
             }
+            used_memory_ids = []
             for memory in relevant:
                 memory_type = memory.get("memory_type", "fact")
                 content = memory.get("content", "")
                 if memory_type in grouped and content:
                     grouped[memory_type].append(content)
+                    if "id" in memory:
+                        used_memory_ids.append(memory["id"])
 
             labels = {
                 "fact": "长期事实",
@@ -94,6 +97,7 @@ class MemoryCapability(Capability):
             if sections:
                 memory_text = "相关记忆:\n" + "\n\n".join(sections)
                 context.messages.append({"role": "system", "content": memory_text})
+                mark_memories_used(used_memory_ids)
         return False, context, None
 
 class CacheCapability(Capability):
