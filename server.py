@@ -59,7 +59,7 @@ def chat(request: ChatRequest):
     ctx = PipelineContext()
     ctx.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     ctx.messages.append({"role": "user", "content": request.message})
-    ctx.schemas = registry.select(request.message, k=3)
+    ctx.schemas = registry.select(request.message, k=10)
 
     # 存用户消息
     conv_id = request.conversation_id

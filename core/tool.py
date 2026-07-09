@@ -9,6 +9,7 @@ import uuid
 import glob as glob_mod
 from datetime import datetime
 from duckduckgo_search import DDGS
+from infra.security import ALLOWED_LEVELS, resolve_workspace_path
 
 class Tool:
     def __init__(self, name: str, description: str, parameters: dict, risk_level: str, tags: list = None, examples: list = None, strict: bool = True, execute = None):
@@ -33,13 +34,17 @@ class Tool:
         }
 
 def _read_file(path: str) -> str:
-    """读取指定路径的文件内容"""
+    """读取指定路径的文件内容，读取前会校验路径是否在工作区内。"""
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        safe_path = resolve_workspace_path(path)
+        with open(safe_path, "r", encoding="utf-8") as f:
             return f.read()
+    except ValueError as e:
+        return f"超出安全范围: {e}"
     except Exception as e:
-        return f"无法读取文件: {e}"
+        return f"文件读取失败: {e}"
     
+
 read_file = Tool(
     name="read_file",
     description="读取文件内容",
@@ -61,15 +66,14 @@ read_file = Tool(
 )
 
 def _write_file(path: str, content: str) -> str:
-    """
-    该函数用于将指定内容写入到指定路径的文件中。
-
-    path参数是要写入的文件的路径，content参数是要写入的内容。函数会尝试打开文件并写入内容，如果成功则返回成功信息。如果文件无法写入，则返回错误信息。
-    """
+    """把内容写入指定文件，写入前会校验路径是否在工作区内。"""
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        safe_path = resolve_workspace_path(path)
+        with open(safe_path, "w", encoding="utf-8") as f:
             f.write(content)
         return "文件写入成功"
+    except ValueError as e:
+        return f"超出安全范围: {e}"
     except Exception as e:
         return f"无法写入文件: {e}"
 
@@ -98,23 +102,22 @@ write_file = Tool(
 )
 
 def _edit_file(path: str, old_string: str, new_string: str) -> str:
-    """
-    该函数用于在指定路径的文件中查找并替换指定的字符串。
-
-    path参数是要编辑的文件的路径，old_string参数是要替换的旧字符串，new_string参数是要替换的新字符串。函数会尝试打开文件并进行替换操作，如果成功则返回成功信息。如果文件无法编辑，则返回错误信息。
-    """
+    """在指定文件中替换文本，编辑前会校验路径是否在工作区内。"""
     try:
-        with open(path, "r", encoding = "utf-8") as f:
+        safe_path = resolve_workspace_path(path)
+        with open(safe_path, "r", encoding="utf-8") as f:
             content = f.read()
             if old_string in content:
                 content = content.replace(old_string, new_string)
             else:
                 return "文件中未找到指定的旧字符串"
-            
-        with open(path, "w", encoding = "utf-8") as f_write:
-                f_write.write(content)
-                return "文件编辑成功"
-        
+
+        with open(safe_path, "w", encoding="utf-8") as f_write:
+            f_write.write(content)
+            return "文件编辑成功"
+
+    except ValueError as e:
+        return f"超出安全范围: {e}"
     except Exception as e:
         return f"无法编辑文件: {e}"
 
@@ -147,20 +150,18 @@ edit_file = Tool(
 )  
 
 def _grep(path: str, pattern: str) -> str:
-    """
-    该函数用于在指定路径的文件中查找指定的字符串模式。
-
-    path参数是要查找的文件的路径，pattern参数是要查找的字符串模式。函数会尝试打开文件并查找匹配的行，如果成功则返回匹配行的字符串表示。如果文件无法读取或没有找到匹配行，则返回错误信息。
-    """
+    """在指定文件中查找字符串，读取前会校验路径是否在工作区内。"""
     try:
-        with open(path, "r", encoding = "utf-8") as f:
+        safe_path = resolve_workspace_path(path)
+        with open(safe_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
             matched_lines = [line for line in lines if pattern in line]
             if matched_lines:
                 return "\n".join(matched_lines)
-            else:
-                return "文件中未找到匹配的字符串模式"
-            
+            return "文件中未找到匹配的字符串模式"
+
+    except ValueError as e:
+        return f"超出安全范围: {e}"
     except Exception as e:
         return f"无法读取文件: {e}"
 
@@ -234,17 +235,18 @@ bash = Tool(
 )
     
 def _list_files(path: str) -> str:
-    """接收一个目录路径，返回该目录下所有文件和子目录的名称列表。"""
+    """列出指定目录下的文件和子目录，访问前会校验路径是否在工作区内。"""
     try:
-        items = os.listdir(path)
-        # 目录在前、文件在后，看着整齐
-        dirs = [f"[目录] {d}" for d in items if os.path.isdir(os.path.join(path, d))]
-        files = [f for f in items if not os.path.isdir(os.path.join(path, f))]
+        safe_path = resolve_workspace_path(path)
+        items = os.listdir(safe_path)
+        dirs = [f"[目录] {item}" for item in items if os.path.isdir(safe_path / item)]
+        files = [item for item in items if not os.path.isdir(safe_path / item)]
         sorted_items = dirs + files
         if sorted_items:
             return "\n".join(sorted_items)
-        else:
-            return f"目录 {path} 为空"
+        return f"目录 {safe_path} 为空"
+    except ValueError as e:
+        return f"超出安全范围: {e}"
     except Exception as e:
         return f"无法列出文件: {e}"
 
@@ -269,12 +271,17 @@ list_files = Tool(
 )
 
 def _create_directory(path: str) -> str:
+    """创建指定目录，创建前会校验路径是否在工作区内。"""
     try:
-        os.makedirs(path, exist_ok=True)
-        return f"目录{path}创建完成"
+        safe_path = resolve_workspace_path(path)
+        os.makedirs(safe_path, exist_ok=True)
+        return f"目录 {safe_path} 创建完成"
+    except ValueError as e:
+        return f"超出安全范围: {e}"
     except Exception as e:
-        return f"目录{path}创建失败: {e}"
+        return f"目录 {path} 创建失败: {e}"
     
+
 create_directory = Tool(
     name="create_directory",
     description="创建指定目录下的文件夹",
@@ -369,10 +376,13 @@ web_search = Tool(
 # ── 更多文件操作 ──
 
 def _delete_file(path: str) -> str:
-    """删除指定路径的文件"""
+    """删除指定文件，删除前会校验路径是否在工作区内。"""
     try:
-        os.remove(path)
-        return f"文件 {path} 已删除"
+        safe_path = resolve_workspace_path(path)
+        os.remove(safe_path)
+        return f"文件 {safe_path} 已删除"
+    except ValueError as e:
+        return f"超出安全范围: {e}"
     except Exception as e:
         return f"无法删除文件: {e}"
 
@@ -390,10 +400,14 @@ delete_file = Tool(
 )
 
 def _move_file(source: str, destination: str) -> str:
-    """移动/重命名文件"""
+    """移动或重命名文件，源路径和目标路径都必须在工作区内。"""
     try:
-        shutil.move(source, destination)
-        return f"已将 {source} 移动到 {destination}"
+        safe_source = resolve_workspace_path(source)
+        safe_destination = resolve_workspace_path(destination)
+        shutil.move(safe_source, safe_destination)
+        return f"已将 {safe_source} 移动到 {safe_destination}"
+    except ValueError as e:
+        return f"超出安全范围: {e}"
     except Exception as e:
         return f"无法移动文件: {e}"
 
@@ -414,10 +428,14 @@ move_file = Tool(
 )
 
 def _copy_file(source: str, destination: str) -> str:
-    """复制文件"""
+    """复制文件，源路径和目标路径都必须在工作区内。"""
     try:
-        shutil.copy2(source, destination)
-        return f"已将 {source} 复制到 {destination}"
+        safe_source = resolve_workspace_path(source)
+        safe_destination = resolve_workspace_path(destination)
+        shutil.copy2(safe_source, safe_destination)
+        return f"已将 {safe_source} 复制到 {safe_destination}"
+    except ValueError as e:
+        return f"超出安全范围: {e}"
     except Exception as e:
         return f"无法复制文件: {e}"
 
@@ -438,17 +456,26 @@ copy_file = Tool(
 )
 
 def _get_file_info(path: str) -> str:
-    """获取文件基本信息"""
+    """获取文件基本信息，访问前会校验路径是否在工作区内。"""
     try:
-        stat = os.stat(path)
+        safe_path = resolve_workspace_path(path)
+        stat = os.stat(safe_path)
         size_kb = stat.st_size / 1024
         mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
         atime = datetime.fromtimestamp(stat.st_atime).strftime("%Y-%m-%d %H:%M:%S")
         lines = []
-        if path.endswith((".py", ".txt", ".md", ".json", ".yaml", ".yml", ".html", ".css", ".js", ".ts")):
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
+        if str(safe_path).endswith((".py", ".txt", ".md", ".json", ".yaml", ".yml", ".html", ".css", ".js", ".ts")):
+            with open(safe_path, "r", encoding="utf-8", errors="replace") as f:
                 lines = f.readlines()
-        return f"文件: {path}\n大小: {size_kb:.1f} KB\n行数: {len(lines)}\n修改时间: {mtime}\n访问时间: {atime}"
+        return (
+            f"文件: {safe_path}\n"
+            f"大小: {size_kb:.1f} KB\n"
+            f"行数: {len(lines)}\n"
+            f"修改时间: {mtime}\n"
+            f"访问时间: {atime}"
+        )
+    except ValueError as e:
+        return f"超出安全范围: {e}"
     except Exception as e:
         return f"无法获取文件信息: {e}"
 
@@ -466,12 +493,15 @@ get_file_info = Tool(
 )
 
 def _glob_find_files(pattern: str) -> str:
-    """用通配符查找文件，如 *.py 或 **/*.py"""
+    """用通配符查找工作区内文件，通配符不能逃出工作区。"""
     try:
-        matches = glob_mod.glob(pattern, recursive=True)
+        safe_pattern = resolve_workspace_path(pattern)
+        matches = glob_mod.glob(str(safe_pattern), recursive=True)
         if not matches:
-            return f"未找到匹配 '{pattern}' 的文件"
+            return f"未找到匹配 {pattern!r} 的文件"
         return "\n".join(matches[:50])
+    except ValueError as e:
+        return f"超出安全范围: {e}"
     except Exception as e:
         return f"查找文件失败: {e}"
 
@@ -489,23 +519,26 @@ glob_find_files = Tool(
 )
 
 def _find_in_files(directory: str, pattern: str, file_pattern: str = "*") -> str:
-    """在目录下所有文件中搜索指定内容"""
+    """在工作区内的指定目录中递归搜索文件内容。"""
     try:
+        safe_directory = resolve_workspace_path(directory)
         results = []
-        for root, _, files in os.walk(directory):
-            for f in files:
-                if glob_mod.fnmatch.fnmatch(f, file_pattern):
-                    filepath = os.path.join(root, f)
+        for root, _, files in os.walk(safe_directory):
+            for file_name in files:
+                if glob_mod.fnmatch.fnmatch(file_name, file_pattern):
+                    filepath = os.path.join(root, file_name)
                     try:
                         with open(filepath, "r", encoding="utf-8", errors="replace") as fh:
-                            for i, line in enumerate(fh.readlines(), 1):
+                            for line_number, line in enumerate(fh.readlines(), 1):
                                 if pattern in line:
-                                    results.append(f"{filepath}:{i}: {line.rstrip()}")
+                                    results.append(f"{filepath}:{line_number}: {line.rstrip()}")
                     except Exception:
                         pass
         if not results:
-            return f"在 {directory} 中未找到包含 '{pattern}' 的文件"
+            return f"在 {safe_directory} 中未找到包含 {pattern!r} 的文件"
         return "\n".join(results[:50])
+    except ValueError as e:
+        return f"超出安全范围: {e}"
     except Exception as e:
         return f"跨文件搜索失败: {e}"
 
@@ -527,12 +560,20 @@ find_in_files = Tool(
 )
 
 def _count_lines(path: str) -> str:
-    """统计文件行数"""
+    """统计文件行数，读取前会校验路径是否在工作区内。"""
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        safe_path = resolve_workspace_path(path)
+        with open(safe_path, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
-        empty = sum(1 for l in lines if l.strip() == "")
-        return f"文件: {path}\n总行数: {len(lines)}\n空行: {empty}\n有效行: {len(lines) - empty}"
+        empty = sum(1 for line in lines if line.strip() == "")
+        return (
+            f"文件: {safe_path}\n"
+            f"总行数: {len(lines)}\n"
+            f"空行: {empty}\n"
+            f"有效行: {len(lines) - empty}"
+        )
+    except ValueError as e:
+        return f"超出安全范围: {e}"
     except Exception as e:
         return f"无法统计行数: {e}"
 
@@ -913,8 +954,3 @@ ALL_TOOLS = [
     git_branch,
 ]
 
-ALLOWED_LEVELS = {
-    "low": 1,
-    "medium": 2,
-    "high": 3
-}
