@@ -18,7 +18,12 @@ from dataclasses import dataclass, field
 @dataclass
 class PipelineContext:
     """Pipeline 中各 Capability 之间传递的上下文"""
+    # 本次真正传给 LLM 的上下文
     messages: list[dict] = field(default_factory=list)
+
+    # 真实 user / assistant 对话，用于持久化和 Reflection
+    conversation_messages: list[dict] = field(default_factory=list)
+
     schemas: list[dict] = field(default_factory=list)
     conversation_id: int | None = None
     metadata: dict = field(default_factory=dict)

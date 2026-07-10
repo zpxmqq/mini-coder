@@ -50,15 +50,31 @@ class ConversationCapability(Capability):
         conv_id = request.conversation_id
         if conv_id and check_conversation_id(conv_id):
             history = get_messages(conv_id)
-            context.messages.extend(history)
         else:
             conv_id = create_conversation()
+            history = []
+
+        current_user = {"role": "user", "content": request.message}
+        conversation_messages = history + [current_user]
+
+        # 真实对话和模型输入分别保存，避免临时注入内容污染原始对话。
+        context.conversation_messages.extend(
+            message.copy() for message in conversation_messages
+        )
+        context.messages.extend(
+            message.copy() for message in conversation_messages
+        )
+        add_message(conv_id, "user", request.message)
         context.conversation_id = conv_id
         return False, context, None
 
     def on_response(self, answer, context):
         if context.conversation_id:
             add_message(context.conversation_id, "assistant", answer)
+            context.conversation_messages.append({
+                "role": "assistant",
+                "content": answer,
+            })
         return answer
 
 
@@ -122,9 +138,12 @@ class ReflectionCapability(Capability):
         self.min_messages = min_messages
 
     def on_response(self, answer, context):
-        if context.conversation_id and len(context.messages) >= self.min_messages:
-            messages_for_reflection = context.messages + [
-                {"role": "assistant", "content": answer}
+        if (
+            context.conversation_id
+            and len(context.conversation_messages) >= self.min_messages
+        ):
+            messages_for_reflection = [
+                message.copy() for message in context.conversation_messages
             ]
             reflect(context.conversation_id, messages_for_reflection)
         return answer

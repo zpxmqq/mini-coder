@@ -6,7 +6,7 @@ from config import api_key, base_url
 from core.agent import run as agent_run
 from core.registry import ToolRegistry
 from core.tool import ALL_TOOLS
-from infra.db import init_db, add_message, get_messages, check_conversation_id
+from infra.db import init_db, get_messages, check_conversation_id
 from capabilities.base import AgentPipeline, PipelineContext
 from capabilities.builtin import (
     SecurityCapability,
@@ -58,13 +58,7 @@ def chat(request: ChatRequest):
     # ── 准备上下文 ──
     ctx = PipelineContext()
     ctx.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    ctx.messages.append({"role": "user", "content": request.message})
     ctx.schemas = registry.select(request.message, k=10)
-
-    # 存用户消息
-    conv_id = request.conversation_id
-    if conv_id and check_conversation_id(conv_id):
-        add_message(conv_id, "user", request.message)
 
     # ── 阶段 1: on_request ──
     pipeline = AgentPipeline([

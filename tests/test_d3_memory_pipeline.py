@@ -47,6 +47,10 @@ def test_d3_memory_capabilities_work_as_request_response_pipeline():
         assert any("user prefers slow explanations" in m["content"] for m in context.messages)
 
         answer = "D3 memory pipeline is connected."
+        context.conversation_messages = [
+            {"role": "user", "content": request.message},
+            {"role": "assistant", "content": answer},
+        ]
         returned_answer = reflection_capability.on_response(answer, context)
 
         assert returned_answer == answer
