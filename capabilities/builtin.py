@@ -10,8 +10,29 @@ from infra.security import check_prompt_injection
 from core.tool import ALLOWED_LEVELS
 from infra.memory import retrieve_memories
 from infra.reflection import reflect
+from infra.context_compressor import (
+    SummaryBudget,
+    parse_context_summary,
+    summarize_context,
+)
+from infra.context_manager import (
+    ContextBudget,
+    estimate_message_tokens,
+    estimate_messages_tokens,
+    format_context_summary,
+    inspect_context,
+    split_context_window,
+)
 from infra.cache import get_cache_key, check_cache, set_cache
-from infra.db import create_conversation, get_messages, check_conversation_id, add_message, mark_memories_used
+from infra.db import (
+    add_message,
+    check_conversation_id,
+    create_conversation,
+    get_context_summary_state,
+    get_message_records,
+    mark_memories_used,
+    upsert_context_summary_state,
+)
 import time
 
 
@@ -49,13 +70,27 @@ class ConversationCapability(Capability):
     def on_request(self, request, context):
         conv_id = request.conversation_id
         if conv_id and check_conversation_id(conv_id):
-            history = get_messages(conv_id)
+            records = get_message_records(conv_id)
         else:
             conv_id = create_conversation()
-            history = []
+            records = []
+
+        history = [
+            {
+                "role": record["role"],
+                "content": record["content"],
+            }
+            for record in records
+        ]
 
         current_user = {"role": "user", "content": request.message}
         conversation_messages = history + [current_user]
+        current_message_id = add_message(conv_id, "user", request.message)
+        conversation_records = records + [{
+            "id": current_message_id,
+            "role": "user",
+            "content": request.message,
+        }]
 
         # 真实对话和模型输入分别保存，避免临时注入内容污染原始对话。
         context.conversation_messages.extend(
@@ -64,18 +99,163 @@ class ConversationCapability(Capability):
         context.messages.extend(
             message.copy() for message in conversation_messages
         )
-        add_message(conv_id, "user", request.message)
+        context.metadata["conversation_records"] = [
+            record.copy() for record in conversation_records
+        ]
         context.conversation_id = conv_id
         return False, context, None
 
     def on_response(self, answer, context):
         if context.conversation_id:
-            add_message(context.conversation_id, "assistant", answer)
+            assistant_message_id = add_message(
+                context.conversation_id,
+                "assistant",
+                answer,
+            )
             context.conversation_messages.append({
                 "role": "assistant",
                 "content": answer,
             })
+            context.metadata.setdefault("conversation_records", []).append({
+                "id": assistant_message_id,
+                "role": "assistant",
+                "content": answer,
+            })
         return answer
+
+
+class ContextCompressionCapability(Capability):
+    """上下文压缩：超过 token 阈值时，用结构化摘要替换较早对话。"""
+
+    def __init__(
+        self,
+        keep_recent_turns: int = 4,
+        budget: ContextBudget | None = None,
+        summary_budget: SummaryBudget | None = None,
+    ):
+        self.keep_recent_turns = keep_recent_turns
+        self.budget = budget
+        self.summary_budget = summary_budget
+
+    @staticmethod
+    def _replace_context_messages(
+        context: PipelineContext,
+        summary_message: dict,
+        retained_records: list[dict],
+    ) -> None:
+        """用摘要和指定的原始记录重建本次模型输入。"""
+        preserved_count = max(
+            len(context.messages) - len(context.conversation_messages),
+            0,
+        )
+        compressed_messages = [
+            message.copy()
+            for message in context.messages[:preserved_count]
+        ]
+        compressed_messages.append(summary_message.copy())
+        compressed_messages.extend(
+            {
+                "role": record["role"],
+                "content": record["content"],
+            }
+            for record in retained_records
+        )
+        context.messages = compressed_messages
+
+    def on_request(self, request, context):
+        stats = inspect_context(
+            context.messages,
+            context.schemas,
+            self.budget,
+        )
+        if not stats.should_compress:
+            return False, context, None
+
+        conversation_records = context.metadata.get("conversation_records")
+        if not conversation_records:
+            return False, context, None
+
+        window = split_context_window(
+            conversation_records,
+            keep_recent_turns=self.keep_recent_turns,
+        )
+        if not window.compressible_messages:
+            return False, context, None
+
+        state = None
+        previous_summary = None
+        compressed_through_message_id = 0
+        if context.conversation_id is not None:
+            state = get_context_summary_state(context.conversation_id)
+            if state is not None:
+                previous_summary = parse_context_summary(state["summary_json"])
+                if previous_summary is not None:
+                    compressed_through_message_id = int(
+                        state["compressed_through_message_id"]
+                    )
+
+        new_compressible_records = [
+            record
+            for record in window.compressible_messages
+            if isinstance(record.get("id"), int)
+            and record["id"] > compressed_through_message_id
+        ]
+        new_compressible_messages = [
+            {
+                "role": record["role"],
+                "content": record["content"],
+            }
+            for record in new_compressible_records
+        ]
+
+        summary = summarize_context(
+            new_compressible_messages,
+            previous_summary=previous_summary,
+            budget=self.summary_budget,
+        )
+        if summary is None:
+            if previous_summary is not None:
+                fallback_records = [
+                    record
+                    for record in conversation_records
+                    if isinstance(record.get("id"), int)
+                    and record["id"] > compressed_through_message_id
+                ]
+                self._replace_context_messages(
+                    context,
+                    format_context_summary(previous_summary),
+                    fallback_records,
+                )
+            return False, context, None
+
+        summary_message = format_context_summary(summary)
+
+        if new_compressible_records and context.conversation_id is not None:
+            compressed_through_message_id = new_compressible_records[-1]["id"]
+            represented_messages = [
+                {
+                    "role": record["role"],
+                    "content": record["content"],
+                }
+                for record in window.compressible_messages
+            ]
+            upsert_context_summary_state(
+                conversation_id=context.conversation_id,
+                summary=summary,
+                compressed_through_message_id=compressed_through_message_id,
+                source_token_count=estimate_messages_tokens(represented_messages),
+                summary_token_count=estimate_message_tokens(summary_message),
+            )
+
+        retained_records = list(window.recent_messages)
+        if window.current_user_message is not None:
+            retained_records.append(window.current_user_message)
+        self._replace_context_messages(
+            context,
+            summary_message,
+            retained_records,
+        )
+        return False, context, None
 
 
 class MemoryCapability(Capability):

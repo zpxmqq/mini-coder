@@ -21,21 +21,22 @@ def test_existing_conversation_keeps_order_and_persists_user_once():
     from capabilities.base import PipelineContext
 
     original_check = builtin.check_conversation_id
-    original_get = builtin.get_messages
+    original_get = builtin.get_message_records
     original_create = builtin.create_conversation
     original_add = builtin.add_message
     saved_messages = []
 
     try:
         builtin.check_conversation_id = lambda conversation_id: conversation_id == 7
-        builtin.get_messages = lambda conversation_id: [
-            {"role": "user", "content": "旧问题"},
-            {"role": "assistant", "content": "旧回答"},
+        builtin.get_message_records = lambda conversation_id: [
+            {"id": 1, "role": "user", "content": "旧问题"},
+            {"id": 2, "role": "assistant", "content": "旧回答"},
         ]
         builtin.create_conversation = lambda: 99
-        builtin.add_message = lambda conversation_id, role, content: saved_messages.append(
-            (conversation_id, role, content)
-        )
+        builtin.add_message = lambda conversation_id, role, content: (
+            saved_messages.append((conversation_id, role, content)),
+            3,
+        )[1]
 
         request = SimpleNamespace(conversation_id=7, message="当前问题")
         context = PipelineContext(
@@ -61,12 +62,13 @@ def test_existing_conversation_keeps_order_and_persists_user_once():
             {"role": "user", "content": "当前问题"},
         ]
         assert saved_messages == [(7, "user", "当前问题")]
+        assert context.metadata["conversation_records"][-1]["id"] == 3
 
         context.messages[-1]["content"] = "只修改模型输入"
         assert context.conversation_messages[-1]["content"] == "当前问题"
     finally:
         builtin.check_conversation_id = original_check
-        builtin.get_messages = original_get
+        builtin.get_message_records = original_get
         builtin.create_conversation = original_create
         builtin.add_message = original_add
 
@@ -78,20 +80,21 @@ def test_new_conversation_persists_first_user_message():
     from capabilities.base import PipelineContext
 
     original_check = builtin.check_conversation_id
-    original_get = builtin.get_messages
+    original_get = builtin.get_message_records
     original_create = builtin.create_conversation
     original_add = builtin.add_message
     saved_messages = []
 
     try:
         builtin.check_conversation_id = lambda conversation_id: False
-        builtin.get_messages = lambda conversation_id: (_ for _ in ()).throw(
+        builtin.get_message_records = lambda conversation_id: (_ for _ in ()).throw(
             AssertionError("新会话不应该读取历史消息")
         )
         builtin.create_conversation = lambda: 42
-        builtin.add_message = lambda conversation_id, role, content: saved_messages.append(
-            (conversation_id, role, content)
-        )
+        builtin.add_message = lambda conversation_id, role, content: (
+            saved_messages.append((conversation_id, role, content)),
+            1,
+        )[1]
 
         request = SimpleNamespace(conversation_id=None, message="第一条问题")
         context = PipelineContext(
@@ -113,9 +116,12 @@ def test_new_conversation_persists_first_user_message():
             {"role": "user", "content": "第一条问题"},
         ]
         assert saved_messages == [(42, "user", "第一条问题")]
+        assert context.metadata["conversation_records"] == [
+            {"id": 1, "role": "user", "content": "第一条问题"}
+        ]
     finally:
         builtin.check_conversation_id = original_check
-        builtin.get_messages = original_get
+        builtin.get_message_records = original_get
         builtin.create_conversation = original_create
         builtin.add_message = original_add
 
@@ -130,9 +136,10 @@ def test_response_updates_clean_conversation_history_once():
     saved_messages = []
 
     try:
-        builtin.add_message = lambda conversation_id, role, content: saved_messages.append(
-            (conversation_id, role, content)
-        )
+        builtin.add_message = lambda conversation_id, role, content: (
+            saved_messages.append((conversation_id, role, content)),
+            2,
+        )[1]
         context = PipelineContext(
             messages=[{"role": "system", "content": "系统提示"}],
             conversation_messages=[{"role": "user", "content": "当前问题"}],
@@ -150,6 +157,9 @@ def test_response_updates_clean_conversation_history_once():
             {"role": "system", "content": "系统提示"},
         ]
         assert saved_messages == [(42, "assistant", "最终回答")]
+        assert context.metadata["conversation_records"] == [
+            {"id": 2, "role": "assistant", "content": "最终回答"}
+        ]
     finally:
         builtin.add_message = original_add
 

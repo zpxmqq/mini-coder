@@ -11,6 +11,7 @@ from capabilities.base import AgentPipeline, PipelineContext
 from capabilities.builtin import (
     SecurityCapability,
     ConversationCapability,
+    ContextCompressionCapability,
     MemoryCapability,
     CacheCapability,
     ReflectionCapability,
@@ -64,6 +65,7 @@ def chat(request: ChatRequest):
     pipeline = AgentPipeline([
         SecurityCapability(),
         ConversationCapability(),
+        ContextCompressionCapability(),
         MemoryCapability(),
         CacheCapability(),
         ReflectionCapability(),

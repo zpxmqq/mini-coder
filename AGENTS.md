@@ -61,6 +61,38 @@
 
 ## 四、本周目标(每周一更新)
 
+### 当前深化周期 · 2026-07-06 ~ 2026-07-12
+
+> 7 月 6 日主动回退到刚完成 Capability 架构的 D0，目的不是重新堆功能，而是按 D3、D4、D5 顺序读懂并重建。当前已经重新完成到 D5.7。
+
+#### 已完成
+
+- [x] **D0 Capability 架构**：`PipelineContext` + `Capability` + `AgentPipeline`，各能力通过 `on_request/on_response` 编排。
+- [x] **D3 记忆深化**：typed memory、JSON 校验、完全去重、embedding 相似召回、LLM merge 决策、时间衰减、引用次数和多因子排序；详见 `D3_MEMORY_NOTES.md`。
+- [x] **D4 安全深化**：workspace 路径白名单、风险等级、权限检查、人工确认、pending resume、audit log；详见 `D4_SECURITY_NOTES.md`。
+- [x] **D5.0~D5.7 上下文治理**：消息职责分离、token 预算、轮次窗口、七字段摘要、Capability 接入、MySQL 滚动摘要、message_id 游标、分块滚动压缩；详见 `D5_CONTEXT_NOTES.md`。
+- [x] **D5 真实数据库验证**：MySQL 8.4 首次写入、读取、第二次 upsert、version 递增和测试数据清理均通过。
+
+#### 当前能力边界
+
+- D5 已证明控制流、JSON 校验、分块完整性、失败回退和 MySQL 状态更新正确。
+- D5 尚未证明真实摘要 LLM 的语义保真率，也没有得到 20+ 轮对话的压缩率和任务成功率数字。
+- 当前 token 统计是启发式估算，不是服务端官方 tokenizer。
+- 同一 conversation 的并发摘要更新还没有会话锁或乐观锁。
+
+#### 已确认的后续顺序
+
+```text
+D6 流式 SSE
+  -> D10 + D11 中保留的反馈记录 / 可观测性工程能力
+  -> D7 主从 Agent
+  -> D8 LangGraph 对比
+  -> 形成可投递的完整框架和简历
+  -> 集中回退、学习并特色化 RAG
+```
+
+完整的“反馈驱动自动调整路由权重”已经从主线砍掉，不把未经评测的自动改权重包装成自进化。反馈部分只保留采集、分析和与 trace 联动的工程价值。
+
 ### Week 1 · 2026-06-06 ~ 2026-06-30(扩展窗口,含期末)
 
 > 因 6/23 期末考,Week 1 从标准 7 天扩到 25 天。三段式:
@@ -134,12 +166,17 @@
 | Day 0 | 06-05 | n/a | uv 装通 / Hello DeepSeek 跑通 / .env 改造 / 三个 ref repo clone | 用约 5 小时,主要在抄+理解,基础比预想更弱(看不懂 traceback、Python 阅读量极少) | Week 1 不赶进度,优先打基础;每写一段代码必须能答 what/why/alternative |
 | Week 1 | 06-06~06-24 | 100%(代码全完成,字典分发重构也做了;录视频可选,未做) | 5 工具(read/write/edit/grep/bash)+ ReAct loop + MAX_ITER + try/except + 危险命令黑名单;复合任务多步调用验证通过;agent.py 已从 5 个 if/elif 重构为 TOOL_FUNCTIONS 字典分发(87→43 行) | 实际有效工作 ~4 天 vs 计划 16 day-unit,大幅超前(Python 基础被低估 + 没抄代码全手写) | Week 2 开始 Skill 二阶段路由(embedding 召回 + LLM 精排);装饰器自动注册工具待工具≥8个再做;bash 安全 Week 6 升级白名单/沙箱;残留 hello_ai.py/test_document.txt 待清理 |
 | Week 2 | 06-25~06-25 | ~90%(召回主干+重构+真数字全完成;README 待补) | embedding 二阶段路由:retriever.py(embed/top_k/route)+ ToolRegistry 类封装工具管理;5真+25假=30工具召回测试 **准确率 10/10=100%,token 7822→1506 节省 81%**;架构重构:召回逻辑从 main 抽到 ToolRegistry,ALL_TOOLS/TOOL_FUNCTIONS 集中到 tool.py,加工具只改一处 | 1 天完成(本地 embedding 比预想顺,bge-small-zh CPU 够用);中途文件丢失重写一次(VS Code 重命名翻车) | W4 复盘:README 写两个数字+为什么两阶段;装饰器注册待工具≥8;**召回局限**:k=3 可能漏工具(复合任务需多工具时),100% 是因假工具区分度高,语义相近工具会降——面试要诚实讲 |
+| 深化 D3 | 07-07~07-08 | 100%(工程链路完成，效果数字待评测) | typed memory + 公共 JSON 解析 + 完全/语义去重 + LLM merge + 时间衰减 + 使用次数重排 + MySQL 使用状态 | 复杂判断仍主要交给 LLM；代码结构已经理解，但真实去重准确率和检索指标尚未量化 | D4 安全深化；D3 后续重点是污染纠错、来源追踪和评测 |
+| 深化 D4 | 07-09 | 100%(计划功能完成) | 路径边界、风险权限、人工确认、pending resume、工具失败回喂、审计日志；D4 测试通过 | 安全职责一度堆入 agent，后拆到 security/audit；pending 和 audit 仍是内存/文件级，未数据库化 | D5 上下文治理；安全后续做命令沙箱和持久化确认状态 |
+| 深化 D5 | 07-10~07-12 | 100%(工程链路完成，语义效果待评测) | D5.0~D5.7：消息分层、预算估算、轮次窗口、七字段摘要、公共 LLM JSON 校验、Capability 接入、MySQL 滚动摘要、游标、分块压缩；7 组 D5 测试及真实 MySQL 集成通过 | 原计划四步不足以处理重复全量摘要和摘要器自身溢出，实际扩展到 D5.7；用户能读懂主体，但复杂分块代码仍需继续消化 | D6；D5 后续在评测阶段补真实 LLM 保真率、压缩率、并发控制 |
 
 ---
 
 ## 六、8 周路线(参考,可动态调整)
 
 > **2026-06-08 重排**:对齐目标岗位 JD,把后端工程化(FastAPI/MySQL/Redis/重试)插进主线,原 Week 3「主从双 Agent」因难度大(45%)+ JD 不要求,移到 stretch backlog(见下表)。**砍 ≠ 删**:前面提前完成就继续做,最终目标仍是全部机制做完。
+>
+> **2026-07-11 校准**：原路线只作为历史基线。当前已经完成 D0~D5 深化，接下来按“D6 → 精简后的 D10+11 → D7 → D8 → 简历框架 → RAG 特色深化”执行；不再以“全部机制都做完”为目标。
 
 | Week | 主题 | 8 周末完成概率 |
 |---|---|---|
@@ -152,7 +189,7 @@
 | 7 | 评测搭建 + ablation(SWE-Lite 子集) | 50%(常被低估) |
 | 8 | README 终稿 + **Docker 部署** + demo 视频 + 简历整理 | 80% |
 
-### Stretch backlog(主线提前完成则继续做,目标是全部完成)
+### 历史 Stretch backlog（当前以 2026-07-11 校准路线为准）
 
 | 机制 | 原计划 | 为何移后 | 完成概率 |
 |---|---|---|---|

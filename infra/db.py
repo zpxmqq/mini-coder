@@ -1,14 +1,10 @@
-"""
-mini-coder 的数据库模块 —— 用于在 SQLite 中持久化存储对话历史。
-
-后续由 server.py 调用，把每一次 HTTP 对话的 message 存进数据库，
-再次请求时就能从数据库中读取历史对话。
-
-用 SQLite（内置，无需额外安装），数据库就是一个文件（mini_coder.db）。
-"""
+"""mini-coder 的 MySQL 持久化模块。"""
 
 import pymysql
 import json
+from dataclasses import asdict
+
+from infra.context_manager import ContextSummary
 
 DB_CONFIG = {
       "host": "127.0.0.1",
@@ -71,6 +67,22 @@ def init_db() -> None:
         )
     """)
 
+    # 建「滚动摘要表」：保存结构化摘要及其覆盖到的最后一条原始消息。
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS conversation_context_summaries (
+            conversation_id INTEGER PRIMARY KEY,
+            summary_json JSON NOT NULL,
+            compressed_through_message_id INTEGER NOT NULL,
+            source_token_count INTEGER DEFAULT 0,
+            summary_token_count INTEGER DEFAULT 0,
+            version INTEGER DEFAULT 1,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (conversation_id) REFERENCES conversations(id),
+            FOREIGN KEY (compressed_through_message_id) REFERENCES messages(id)
+        )
+    """)
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS memories (
             id INTEGER PRIMARY KEY AUTO_INCREMENT,
@@ -97,8 +109,8 @@ def init_db() -> None:
     conn.commit()   # 提交所有操作
     conn.close()    # 关闭连接
 
-def add_message(conversation_id: int, role: str, content: str) -> None:
-    """"
+def add_message(conversation_id: int, role: str, content: str) -> int:
+    """
     输入为信息的ID，以及messages的角色，内容。向messages表中插入一条消息，
     返回这个信息的ID
     """
@@ -126,20 +138,112 @@ def create_conversation(title: str = "") ->int:
     conn.close()
     return conv_id
 
-def get_messages(conversation_id: int) -> list[dict]:
-    """输入一个对话ID查出一个对话的所有消息，按时间顺序返回"""
+def get_message_records(conversation_id: int) -> list[dict]:
+    """按消息 ID 顺序返回带数据库 ID 的原始消息记录。"""
     conn = pymysql.connect(**DB_CONFIG)
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT role, content FROM messages WHERE conversation_id = %s ORDER BY id",
+        "SELECT id, role, content FROM messages WHERE conversation_id = %s ORDER BY id",
         (conversation_id,)
     )
     rows = cursor.fetchall()
     conn.close()
-    messages = []
+    records = []
     for row in rows:
-        messages.append({"role": row[0], "content": row[1]})
-    return messages
+        records.append({
+            "id": row[0],
+            "role": row[1],
+            "content": row[2],
+        })
+    return records
+
+
+def get_messages(conversation_id: int) -> list[dict]:
+    """输入一个对话ID查出一个对话的所有消息，按时间顺序返回。"""
+    return [
+        {
+            "role": record["role"],
+            "content": record["content"],
+        }
+        for record in get_message_records(conversation_id)
+    ]
+
+
+def get_context_summary_state(conversation_id: int) -> dict | None:
+    """读取会话的滚动摘要、压缩边界和压缩指标。"""
+    conn = pymysql.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT summary_json,
+               compressed_through_message_id,
+               source_token_count,
+               summary_token_count,
+               version,
+               updated_at
+        FROM conversation_context_summaries
+        WHERE conversation_id = %s
+        """,
+        (conversation_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if row is None:
+        return None
+
+    summary_json = row[0]
+    if isinstance(summary_json, bytes):
+        summary_json = summary_json.decode("utf-8")
+    elif not isinstance(summary_json, str):
+        summary_json = json.dumps(summary_json, ensure_ascii=False)
+
+    return {
+        "summary_json": summary_json,
+        "compressed_through_message_id": row[1],
+        "source_token_count": row[2],
+        "summary_token_count": row[3],
+        "version": row[4],
+        "updated_at": row[5],
+    }
+
+
+def upsert_context_summary_state(
+    conversation_id: int,
+    summary: ContextSummary,
+    compressed_through_message_id: int,
+    source_token_count: int,
+    summary_token_count: int,
+) -> None:
+    """原子写入滚动摘要和压缩边界；已有记录时更新并增加版本号。"""
+    summary_json = json.dumps(asdict(summary), ensure_ascii=False)
+    conn = pymysql.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO conversation_context_summaries (
+            conversation_id,
+            summary_json,
+            compressed_through_message_id,
+            source_token_count,
+            summary_token_count
+        ) VALUES (%s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            summary_json = VALUES(summary_json),
+            compressed_through_message_id = VALUES(compressed_through_message_id),
+            source_token_count = VALUES(source_token_count),
+            summary_token_count = VALUES(summary_token_count),
+            version = version + 1
+        """,
+        (
+            conversation_id,
+            summary_json,
+            compressed_through_message_id,
+            source_token_count,
+            summary_token_count,
+        ),
+    )
+    conn.commit()
+    conn.close()
 
 def check_conversation_id(conversation_id: int) -> bool:
     """输入一个ID，检查一个对话ID是否存在"""

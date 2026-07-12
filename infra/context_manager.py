@@ -77,6 +77,26 @@ class ContextWindow:
     current_user_message: dict | None
 
 
+@dataclass(frozen=True)
+class ContextSummary:
+    """
+    旧对话经过摘要 LLM 压缩并校验后的结构化结果。
+
+    输入来源：未来的摘要解析器会把 LLM 返回的合法 JSON 转换成该对象。
+    输出用途：交给 format_context_summary() 生成可注入 messages 的 system 消息。
+
+    每个列表字段即使没有内容也要显式传入空列表，避免遗漏字段被静默接受。
+    """
+
+    task_goal: str
+    completed_work: list[str]
+    key_decisions: list[str]
+    file_states: list[str]
+    constraints: list[str]
+    failures: list[str]
+    pending_work: list[str]
+
+
 def estimate_text_tokens(text: str) -> int:
     """
     使用中英文启发式规则估算一段字符串的 token 数。
@@ -272,3 +292,46 @@ def split_context_window(
             else None
         ),
     )
+
+def format_context_summary(summary: ContextSummary) -> dict:
+    """把校验后的结构化摘要转换为可注入 messages 的 system 消息。"""
+    content_part = []
+    content_part.append("历史对话摘要：")
+    content_part.append("当前任务目标：")
+    content_part.append(summary.task_goal)
+
+    if summary.completed_work:
+        content_part.append("已完成工作：")
+        for item in summary.completed_work:
+            content_part.append(f"- {item}")
+
+    if summary.key_decisions:
+        content_part.append("关键决策：")
+        for item in summary.key_decisions:
+            content_part.append(f"- {item}")
+
+    if summary.file_states:
+        content_part.append("文件状态：")
+        for item in summary.file_states:
+            content_part.append(f"- {item}")
+
+    if summary.constraints:
+        content_part.append("约束条件：")
+        for item in summary.constraints:
+            content_part.append(f"- {item}")
+
+    if summary.failures:
+        content_part.append("失败经历：")
+        for item in summary.failures:
+            content_part.append(f"- {item}")
+
+    if summary.pending_work:
+        content_part.append("待完成工作：")
+        for item in summary.pending_work:
+            content_part.append(f"- {item}")
+
+    content = "\n".join(content_part)
+    return {
+        "role": "system",
+        "content": content,
+    }

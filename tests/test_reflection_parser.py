@@ -1,4 +1,4 @@
-from infra.reflection import parse_typed_memories
+from infra.reflection import parse_merge_decision, parse_typed_memories
 
 
 def test_parse_valid_typed_memories():
@@ -51,6 +51,29 @@ def test_parse_accepts_json_inside_markdown_fence():
     assert memories == [
         {"memory_type": "fact", "content": "用户使用 FastAPI 做后端接口"}
     ]
+
+
+def test_parse_merge_decision_accepts_json_inside_markdown_fence():
+    raw = """
+    ```json
+    {
+      "action": "skip",
+      "target_content": "用户正在开发 mini-coder",
+      "reason": "新旧记忆内容重复"
+    }
+    ```
+    """
+    similar_memories = [
+        {"id": 1, "content": "用户正在开发 mini-coder"}
+    ]
+
+    decision = parse_merge_decision(raw, similar_memories)
+
+    assert decision == {
+        "action": "skip",
+        "target_content": "用户正在开发 mini-coder",
+        "reason": "新旧记忆内容重复",
+    }
 
 def test_reflect_skips_existing_memory():
     from types import SimpleNamespace

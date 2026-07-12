@@ -2,6 +2,7 @@
 from infra.memory import find_similar_memories
 from core.provider import chat_with_deepseek
 from infra.db import add_memory, memory_exists, update_memory
+from infra.llm_output import parse_llm_json_array, parse_llm_json_object
 
 
 ALLOWED_MEMORY_TYPES = {"fact", "preference", "reference"}
@@ -63,34 +64,6 @@ MERGE_DECISION_PROMPT = """
 """
 
 
-def _normalize_llm_json(raw_text: str) -> str:
-    """Return the JSON-looking part of an LLM response."""
-    text = raw_text.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
-
-    array_start = text.find("[")
-    array_end = text.rfind("]")
-    object_start = text.find("{")
-    object_end = text.rfind("}")
-
-    candidates = []
-    if array_start != -1 and array_end != -1 and array_start <= array_end:
-        candidates.append((array_start, array_end + 1))
-    if object_start != -1 and object_end != -1 and object_start <= object_end:
-        candidates.append((object_start, object_end + 1))
-
-    if candidates:
-        start, end = min(candidates, key=lambda pair: pair[0])
-        return text[start:end]
-    return text
-
-
 def _default_merge_decision(reason: str = "Invalid merge decision") -> dict:
     return {
         "action": "keep_both",
@@ -105,12 +78,8 @@ def parse_typed_memories(raw_text: str) -> list[dict[str, str]]:
     if not text or text in {"无", "none", "None", "null", "NULL"}:
         return []
 
-    try:
-        data = json.loads(_normalize_llm_json(text))
-    except json.JSONDecodeError:
-        return []
-
-    if not isinstance(data, list):
+    data = parse_llm_json_array(text)
+    if data is None:
         return []
 
     memories: list[dict[str, str]] = []
@@ -133,12 +102,8 @@ def parse_typed_memories(raw_text: str) -> list[dict[str, str]]:
 
 def parse_merge_decision(raw_text: str, similar_memories: list[dict]) -> dict:
     """Parse and validate an LLM memory-merge decision."""
-    try:
-        data = json.loads(_normalize_llm_json(raw_text))
-    except json.JSONDecodeError:
-        return _default_merge_decision()
-
-    if not isinstance(data, dict):
+    data = parse_llm_json_object(raw_text)
+    if data is None:
         return _default_merge_decision()
 
     action = str(data.get("action", "")).strip().lower()
