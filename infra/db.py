@@ -39,9 +39,11 @@ def _add_memory_column_if_missing(cursor, column_name: str, column_definition: s
 def init_db() -> None:
     """初始化数据库：创建表（如果不存在）。
 
-    两张表的职责：
+    核心表的职责：
     - conversations：存储对话会话
     - messages：存储会话中的具体消息，通过 conversation_id 关联到 conversations
+    - agent_runs：存储每次 Agent 请求的身份和总体状态
+    - trace_events：按顺序存储一次 Run 内发生的执行事件
     """
     conn = pymysql.connect(**DB_CONFIG)          # 连接到 MySQL 数据库（不存在会自动创建）
     cursor = conn.cursor()                   # cursor 就是“在数据库里执行 SQL 的游标”
@@ -64,6 +66,64 @@ def init_db() -> None:
             content TEXT NOT NULL,                       -- 内容（必填，消息正文）
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- 创建时间（自动填当前时间）
             FOREIGN KEY (conversation_id) REFERENCES conversations(id)  -- 外键约束：conversation_id 必须真实存在
+        )
+    """)
+
+    # 建「Agent Run 表」：一行对应一次完整的 Agent 请求。
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS agent_runs (
+            run_id VARCHAR(80) PRIMARY KEY,
+            conversation_id INTEGER NULL,
+            parent_run_id VARCHAR(80) NULL,
+            status VARCHAR(32) NOT NULL,
+            started_at DATETIME(6) NOT NULL,
+            finished_at DATETIME(6) NULL,
+            CONSTRAINT chk_agent_runs_status CHECK (
+                status IN (
+                    'running',
+                    'needs_confirmation',
+                    'completed',
+                    'failed',
+                    'cancelled'
+                )
+            ),
+            CONSTRAINT fk_agent_runs_conversation
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id),
+            CONSTRAINT fk_agent_runs_parent
+                FOREIGN KEY (parent_run_id) REFERENCES agent_runs(run_id),
+            INDEX idx_agent_runs_conversation (conversation_id),
+            INDEX idx_agent_runs_parent (parent_run_id),
+            INDEX idx_agent_runs_status_started (status, started_at)
+        )
+    """)
+
+    # 建「Trace 事件表」：同一个 Run 内的 sequence 必须从 1 开始且不能重复。
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS trace_events (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            run_id VARCHAR(80) NOT NULL,
+            sequence INTEGER NOT NULL,
+            event_type VARCHAR(64) NOT NULL,
+            iteration INTEGER NULL,
+            tool_call_id VARCHAR(255) NULL,
+            tool_name VARCHAR(255) NULL,
+            success BOOLEAN NULL,
+            duration_ms INTEGER NULL,
+            payload JSON NOT NULL,
+            created_at DATETIME(6) NOT NULL,
+            CONSTRAINT chk_trace_events_sequence CHECK (sequence >= 1),
+            CONSTRAINT chk_trace_events_iteration CHECK (
+                iteration IS NULL OR iteration >= 1
+            ),
+            CONSTRAINT chk_trace_events_duration CHECK (
+                duration_ms IS NULL OR duration_ms >= 0
+            ),
+            CONSTRAINT fk_trace_events_run
+                FOREIGN KEY (run_id) REFERENCES agent_runs(run_id)
+                ON DELETE CASCADE,
+            CONSTRAINT uq_trace_events_run_sequence
+                UNIQUE (run_id, sequence),
+            INDEX idx_trace_events_type_created (event_type, created_at)
         )
     """)
 
